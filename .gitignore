@@ -24,3 +24,5 @@ uw_notes/*.json
 uw_notes/*.md
 uw_notes/images/
 
+# .env
+.env

@@ -1,147 +1,227 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Page } from 'playwright';
+import type { Page } from 'playwright';
 
-const OUT_DIR = path.resolve(process.cwd(), 'uw_notes');
-const IMG_DIR = path.join(OUT_DIR, 'images');
+const ROOT_DIR = path.resolve(process.cwd(), 'uw_notes');
+const QUESTIONS_DIR = path.join(ROOT_DIR, 'questions');
 
-if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR);
-if (!fs.existsSync(IMG_DIR)) fs.mkdirSync(IMG_DIR);
+if (!fs.existsSync(ROOT_DIR)) fs.mkdirSync(ROOT_DIR, { recursive: true });
+if (!fs.existsSync(QUESTIONS_DIR))
+  fs.mkdirSync(QUESTIONS_DIR, { recursive: true });
+
+/** 改善後の JSON スキーマ */
+export interface UWorldOption {
+  optionId: string;        // A, B, C...
+  optionText: string;
+  answerRate: number | null; // (72%) → 72
+  isCorrectOption: boolean;
+  isUserSelected: boolean;
+}
+
+export interface UWorldStats {
+  correctPercentOverall: number | null; // "72%" → 72
+  timeSpentSeconds: number | null;      // "06 mins, 10 secs" → 370
+}
 
 export interface UWorldExtraction {
   url: string;
-  questionId: string | null;
+  questionId: string;
   stem: string | null;
-
-  options: Array<{
-    id: string; // A, B, C...
-    text: string;
-    percent: string | null;
-    isCorrect: boolean;
-    isYourAnswer: boolean;
-  }>;
-
-  correctAnswer: string | null;
-  yourAnswer: string | null;
-
+  options: UWorldOption[];
+  correctOptionId: string | null;  // "F"
+  userOptionId: string | null;     // "E"
   explanation: string | null;
   images: string[];
-
   subject: string | null;
   system: string | null;
   topic: string | null;
-
-  stats: {
-    correctPercent: string | null;
-    timeSpent: string | null;
-  };
+  stats: UWorldStats;
 }
 
+function parseAnswerRate(raw: string | null): number | null {
+  if (!raw) return null;
+  const m = raw.match(/(\d+)%/);
+  return m ? Number(m[1]) : null;
+}
+
+function parseTimeSpent(raw: string | null): number | null {
+  if (!raw) return null;
+
+  // “06 mins, 10 secs”
+  const min = raw.match(/(\d+)\s*min/);
+  const sec = raw.match(/(\d+)\s*sec/);
+
+  const mins = min ? Number(min[1]) : 0;
+  const secs = sec ? Number(sec[1]) : 0;
+
+  return mins * 60 + secs;
+}
+
+/**
+ * Review問題を抽出して JSONスキーマを LLM用に改善。
+ */
 export async function extractUWorldReview(page: Page): Promise<UWorldExtraction> {
   await page.waitForLoadState('domcontentloaded');
 
+  const url = page.url();
+
+  // ---- Question ID ----
+  const questionId = await page.evaluate(() => {
+    const q = document.querySelector('.question-id');
+    if (!q || !q.parentElement) return null;
+
+    const text = q.parentElement.textContent || '';
+    const m = text.match(/Question\s*Id:\s*(\d+)/i);
+    return m ? m[1] : null;
+  });
+
+  if (!questionId) {
+    throw new Error('questionId の抽出に失敗しました。');
+  }
+
+  // setup folder
+  const questionDir = path.join(QUESTIONS_DIR, questionId);
+  const imagesDir = path.join(questionDir, 'images');
+
+  if (!fs.existsSync(questionDir)) fs.mkdirSync(questionDir, { recursive: true });
+  if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
+
   const result: UWorldExtraction = {
-    url: page.url(),
-    questionId: null,
+    url,
+    questionId,
     stem: null,
     options: [],
-    correctAnswer: null,
-    yourAnswer: null,
+    correctOptionId: null,
+    userOptionId: null,
     explanation: null,
     images: [],
     subject: null,
     system: null,
     topic: null,
     stats: {
-      correctPercent: null,
-      timeSpent: null,
-    },
+      correctPercentOverall: null,
+      timeSpentSeconds: null
+    }
   };
-
-  // ---- Question ID ----
-  result.questionId = await page.locator('.question-id').first().innerText().catch(() => null);
 
   // ---- Stem ----
   const stemEl = page.locator('#questionText');
-  if ((await stemEl.count()) > 0) {
+  if (await stemEl.count()) {
     result.stem = (await stemEl.innerText()).trim();
+  }
+
+  // Stem内画像
+  const stemImgs = stemEl.locator('img');
+  for (let i = 0; i < await stemImgs.count(); i++) {
+    const el = stemImgs.nth(i);
+    const filename = `stem_${i}.png`;
+    const filepath = path.join(imagesDir, filename);
+    try {
+      await el.screenshot({ path: filepath });
+      result.images.push(path.join('images', filename));
+    } catch {}
   }
 
   // ---- Options ----
   const rows = page.locator('tr.answer-choice-background');
-  const rowCount = await rows.count();
-
-  for (let i = 0; i < rowCount; i++) {
+  for (let i = 0; i < await rows.count(); i++) {
     const row = rows.nth(i);
 
-    const letter = await row.locator('td:first-of-type span span').innerText().catch(() => '');
-    const cleanLetter = letter.replace('.', '').trim();
+    // 選択肢 ID(A,B..)
+    const letterRaw = await row
+      .locator('td.left-td span')
+      .last()
+      .innerText()
+      .catch(() => '');
+    const optionId = letterRaw.replace('.', '').trim();
 
-    const text = await row.locator('.answer-choice-content span').first().innerText().catch(() => '');
+    // テキスト
+    const optionText = (await row
+      .locator('.answer-choice-content span')
+      .first()
+      .innerText()
+      .catch(() => '')
+    ).trim();
 
-    // percent: "(72%)"
-    const percent = await row.locator('.answer-choice-content span.ng-star-inserted').innerText().catch(() => null);
+    // 回答率 "(72%)"
+    const percentRaw = await row
+      .locator('.answer-choice-content span.ng-star-inserted')
+      .first()
+      .innerText()
+      .catch(() => null);
 
-    const isCorrect = (await row.locator('i.fa-check').count()) > 0;
+    const answerRate = parseAnswerRate(percentRaw);
 
-    const isYourAnswer = (await row.locator('.mat-radio-checked').count()) > 0;
+    // 正解マーク
+    const isCorrectOption = (await row.locator('i.fa-check').count()) > 0;
+
+    // 自分の選択
+    const isUserSelected = (await row.locator('.mat-radio-checked').count()) > 0;
 
     result.options.push({
-      id: cleanLetter,
-      text: text.trim(),
-      percent,
-      isCorrect,
-      isYourAnswer,
+      optionId,
+      optionText,
+      answerRate,
+      isCorrectOption,
+      isUserSelected
     });
 
-    if (isYourAnswer) result.yourAnswer = cleanLetter;
-    if (isCorrect) result.correctAnswer = cleanLetter;
+    if (isCorrectOption) result.correctOptionId = optionId;
+    if (isUserSelected) result.userOptionId = optionId;
   }
 
-  // ---- Stats (correct %, time spent) ----
-  result.stats.correctPercent = await page
-    .locator('.fa-chart-bar')
-    .locator('xpath=following-sibling::*')
-    .locator('.stats-value')
-    .innerText()
-    .catch(() => null);
+  // ---- Stats ----
+  // Correct overall
+  try {
+    const correctBlock = page.locator('.fa-chart-bar').locator('xpath=..');
+    if (await correctBlock.count()) {
+      const v = await correctBlock.locator('.stats-value').first().innerText();
+      result.stats.correctPercentOverall = parseAnswerRate(v);
+    }
+  } catch {}
 
-  result.stats.timeSpent = await page
-    .locator('.fa-clock')
-    .locator('xpath=following-sibling::*')
-    .locator('.stats-value')
-    .innerText()
-    .catch(() => null);
+  // Time spent
+  try {
+    const timeBlock = page.locator('.fa-clock').locator('xpath=..');
+    if (await timeBlock.count()) {
+      const v = await timeBlock.locator('.stats-value').first().innerText();
+      result.stats.timeSpentSeconds = parseTimeSpent(v);
+    }
+  } catch {}
 
   // ---- Explanation ----
   const expl = page.locator('#first-explanation');
-  if ((await expl.count()) > 0) {
+  if (await expl.count()) {
     result.explanation = (await expl.innerText()).trim();
   }
 
-  // ---- Explanation Images ----
-  const imgs = expl.locator('img');
-  const imgCount = await imgs.count();
-
-  for (let i = 0; i < imgCount; i++) {
-    const el = imgs.nth(i);
-    const filename = `uw_img_${Date.now()}_${i}.png`;
-    const filepath = path.join(IMG_DIR, filename);
-
+  // Explanation内画像
+  const explImgs = expl.locator('img');
+  for (let i = 0; i < await explImgs.count(); i++) {
+    const el = explImgs.nth(i);
+    const filename = `explanation_${i}.png`;
+    const filepath = path.join(imagesDir, filename);
     try {
       await el.screenshot({ path: filepath });
-      result.images.push(`images/${filename}`);
+      result.images.push(path.join('images', filename));
     } catch {}
   }
 
   // ---- Subject / System / Topic ----
-  const std = page.locator('.standards .standard');
+  const standards = page.locator('.standards .standard');
+  if (await standards.count() >= 3) {
+    const getStd = async (idx: number) =>
+      (
+        await standards
+          .nth(idx)
+          .locator('.standard-description')
+          .innerText()
+          .catch(() => null)
+      )?.trim() ?? null;
 
-  const stdCount = await std.count();
-  if (stdCount >= 3) {
-    result.subject = await std.nth(0).locator('.standard-description').innerText().catch(() => null);
-    result.system = await std.nth(1).locator('.standard-description').innerText().catch(() => null);
-    result.topic = await std.nth(2).locator('.standard-description').innerText().catch(() => null);
+    result.subject = await getStd(0);
+    result.system = await getStd(1);
+    result.topic = await getStd(2);
   }
 
   return result;

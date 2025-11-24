@@ -1,24 +1,28 @@
-import { connectToChrome } from '@/extractor/connect';
-import { findUWorldPage } from '@/extractor/findUWorldTab';
-import { extractUWorldReview } from '@/extractor/extractUWorldReview';
-import { saveExtraction } from '@/output/save';
+import { connectToChrome } from './extractor/connect';
+import { findUWorldPage } from './extractor/findUWorldTab';
+import { extractUWorldReview } from './extractor/extractUWorldReview';
+import { saveExtraction } from './output/save';
 
 async function main() {
   try {
-    const browser = await connectToChrome(9222);
+    // 1. 既存の Chrome に接続
+    const browser = await connectToChrome({ host: '127.0.0.1', port: 9222 });
+
+    // 2. UWorld タブを探す
     const page = await findUWorldPage(browser);
+    await page.bringToFront();
 
-    const result = await extractUWorldReview(page);
-    const id = `uw_${Date.now()}`;
-    saveExtraction(id, result);
+    // 3. 抽出（Review 画面 1問分）
+    const extraction = await extractUWorldReview(page);
 
-    console.log('Extraction complete.');
-  } catch (error) {
-    if (error instanceof Error) {
-      console.error('Error:', error.message);
-    } else {
-      console.error('Error:', error);
-    }
+    // 4. 保存（question.json）
+    saveExtraction(extraction);
+
+    console.log(
+      `Done: questionId=${extraction.questionId}`,
+    );
+  } catch (e) {
+    console.error('Error during extraction:', (e as Error).message);
     process.exit(1);
   }
 }

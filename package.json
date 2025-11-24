@@ -7,6 +7,7 @@
     "build": "tsc",
     "start": "tsx uw_notes/src/index.ts",
     "dev": "tsx uw_notes/src/index.ts",
+    "gen:md": "tsx uw_notes/src/generate-md/run.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
@@ -16,6 +17,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.3",
+    "openai": "^6.9.1",
     "playwright": "^1.56.1"
   },
   "devDependencies": {

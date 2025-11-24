@@ -1,27 +1,21 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { UWorldExtraction } from '@/extractor/extractUWorldReview';
+import type { UWorldExtraction } from '../extractor/extractUWorldReview';
 
-export function saveExtraction(id: string, data: UWorldExtraction) {
-  const OUT_DIR = path.resolve(process.cwd(), 'uw_notes');
-  const jsonPath = path.join(OUT_DIR, `${id}.json`);
-  const mdPath = path.join(OUT_DIR, `${id}.md`);
+const ROOT_DIR = path.resolve(process.cwd(), 'uw_notes');
+const QUESTIONS_DIR = path.join(ROOT_DIR, 'questions');
 
-  fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
+if (!fs.existsSync(ROOT_DIR)) fs.mkdirSync(ROOT_DIR, { recursive: true });
+if (!fs.existsSync(QUESTIONS_DIR))
+  fs.mkdirSync(QUESTIONS_DIR, { recursive: true });
 
-  const md = [
-    `# UWorld – ${id}`,
-    `> source: ${data.url}`,
-    `## 🧠 Question\n${data.stem || ''}`,
-    `## 📝 Options`,
-    ...data.options.map(o => `- ${o.id}. ${o.text}`),
-    `## 🧩 Explanation\n${data.explanation || ''}`,
-    `## 🖼 Images`,
-    ...data.images.map(img => `![img](${img})`)
-  ].join('\n\n');
+export function saveExtraction(data: UWorldExtraction): void {
+  const questionDir = path.join(QUESTIONS_DIR, data.questionId);
+  if (!fs.existsSync(questionDir))
+    fs.mkdirSync(questionDir, { recursive: true });
 
-  fs.writeFileSync(mdPath, md);
+  const jsonPath = path.join(questionDir, 'question.json');
+  fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2), 'utf8');
 
-  console.log('Saved:', jsonPath);
-  console.log('Saved:', mdPath);
+  console.log('Saved JSON to', jsonPath);
 }
