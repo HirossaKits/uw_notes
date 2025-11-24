@@ -8,6 +8,7 @@
     "start": "tsx uw_notes/src/index.ts",
     "dev": "tsx uw_notes/src/index.ts",
     "gen:md": "tsx uw_notes/src/generate-md/run.ts",
+    "publish:notion": "tsx uw_notes/src/publish/notion/publish.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
@@ -17,7 +18,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@notionhq/client": "^5.4.0",
     "dotenv": "^17.2.3",
+    "gray-matter": "^4.0.3",
     "openai": "^6.9.1",
     "playwright": "^1.56.1"
   },

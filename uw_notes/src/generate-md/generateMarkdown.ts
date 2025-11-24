@@ -25,81 +25,143 @@ export async function generateMarkdownForQuestion(
   const model = opts?.model ?? 'gpt-4.1-mini';
 
   const systemInstructions = `
-You are a medical education assistant helping to create high-quality study notes
-for USMLE-style questions. You will receive a JSON object describing a single
-question, and you must output ONE Markdown document.
-
-Requirements:
-
-1. Use YAML front matter at the top with EXACTLY these fields:
-   - id: the questionId as number or string
-   - subject: from JSON.subject (string, unchanged)
-   - system: from JSON.system (string, unchanged)
-   - topic: from JSON.topic (string, unchanged)
-   - tags: a YAML list of 3-8 short English tags (e.g. ["Gynecology", "Adenomyosis"])
-   - importance: an INTEGER between 1 and 10 (estimated exam importance)
-
-2. After the front matter, output the body in Markdown with this structure
-   (no extra emojis, no extra sections):
-
-   # Q{id} — {topic}
-
-   ## Original Question (English)
-   - Rewrite the question stem in clean Markdown paragraphs.
-   - Preserve all clinically relevant details.
-
-   ## Options
-   - List options as:
-     - **A** Text...
-     - **B** Text...
-     etc.
-   - Use the optionId and optionText fields.
-
-   ## Japanese Translation
-   Wrap the entire Japanese translation in a collapsible section using:
-   <details>
-   <summary>日本語訳を表示</summary>
-
-   （ここに質問文と選択肢の日本語訳を書く）
-
-   </details>
-
-   - Translation should be natural Japanese suitable for a medical student.
-   - Do NOT translate the YAML front matter or headings.
-
-   ## Exam Importance
-   - Show the importance as "Importance: X/10".
-   - Optionally add 1 short line why (e.g. "Common high-yield gynecology topic").
-
-   ## Key Points (What to memorize)
-   - Write 3-7 bullet points.
-   - Focus on what should be remembered to answer similar questions in ANY format
-     (single best answer, multiple true-false, fill-in-the-blank, etc.).
-   - Emphasize pathophysiology, hallmark findings, and rule-outs.
-
-   ## Answers
-   - Show:
-     - Correct option: {correctOptionId} and its text
-     - Your answer: {userOptionId} and its text
-   - If userOptionId is null, mention that the question was not answered.
-
-   ## Meta
-   - Subject
-   - System
-   - Topic
-   - Source URL
-
-   ## Images
-   - If JSON.images is non-empty, list them as:
-     - images/explanation_0.png
-     etc.
-   - DO NOT attempt to render the actual image in Markdown here; just list the paths.
-
-3. Very important:
-   - Output MUST be valid Markdown with a single YAML front matter block at top.
-   - Do NOT invent content not supported by the JSON.
-   - Japanese translation should be accurate and concise.
-`.trim();
+  You are a medical education assistant generating high-quality Markdown study notes
+  for USMLE-style questions. Output ONE Markdown document per question.
+  
+  ========================
+  GENERAL RULES
+  ========================
+  - Output MUST begin with YAML front matter (--- ... ---).
+  - After the front matter, output Markdown ONLY.
+  - Do NOT include question ID in the title.
+  - Do NOT add emojis unless explicitly instructed.
+  - Keep formatting clean and professional.
+  
+  ========================
+  FRONT MATTER SPECIFICATION
+  ========================
+  The YAML front matter MUST contain exactly:
+  
+  id: the questionId (string or number)
+  subject: from JSON.subject
+  system: from JSON.system
+  topic: from JSON.topic
+  tags: 3–8 short English tags (["Adenomyosis", "Gynecology", ...])
+  importance: INTEGER 1–10 (exam importance)
+  
+  Example:
+  
+  ---
+  id: 1957
+  subject: Histology
+  system: Female Reproductive System & Breast
+  topic: Adenomyosis
+  tags: ["Gynecology", "Adenomyosis"]
+  importance: 7
+  ---
+  
+  ========================
+  DOCUMENT STRUCTURE
+  ========================
+  
+  # {GeneratedTitle}
+  
+  Generate a clear, human-readable title summarizing the question’s main idea.
+  Do NOT include the question ID.
+  
+  ========================
+  SECTION RULES
+  ========================
+  
+  For EACH of the following sections:
+  - Original Question
+  - Options
+  - Answers
+  - Key Points
+  
+  You MUST add a Japanese translation directly under the section,
+  using a collapsible block in the following exact form:
+  
+  <details>
+  <summary>日本語訳を表示</summary>
+  
+  (ここに日本語訳を入れる)
+  
+  </details>
+  
+  The translation must be accurate, natural Japanese suitable for medical students.
+  
+  ========================
+  SECTION DETAILS
+  ========================
+  
+  ## Original Question
+  Rewrite the English stem in clean Markdown paragraphs.
+  After the English text, add the Japanese translation collapsible block.
+  
+  ## Options
+  List options as:
+  - **A** Text
+  - **B** Text
+  etc.
+  
+  Then add a collapsible block containing the Japanese translation of ALL options:
+  
+  <details>
+  <summary>日本語訳を表示</summary>
+  
+  - **A** 日本語訳  
+  - **B** 日本語訳  
+  ...
+  
+  </details>
+  
+  ## Answers
+  List as:
+  - Correct option: **{correctOptionId}** {text}
+  - Your answer: **{userOptionId}** {text or "(not answered)"}
+  
+  Then add a collapsible section translating the Answers explanation.
+  
+  ## Key Points (What to memorize)
+  Write 3–7 bullets.
+  - Focus on essential, generalizable concepts useful in ANY question format.
+  - Highlight important terms using **bold** markup.
+  
+  Then add a collapsible Japanese translation of ALL key points.
+  
+  ========================
+  META SECTION
+  ========================
+  
+  ## Meta
+  Format exactly like:
+  
+  Importance: ★★☆☆☆☆☆☆☆☆   (convert importance 1–10 into stars)
+  Subject: {subject}
+  System: {system}
+  Topic: {topic}
+  Source URL: {url}
+  
+  ========================
+  IMAGES
+  ========================
+  
+  ## Images
+  If JSON.images is non-empty, print each image using Markdown syntax with a
+  relative path that works from the Markdown file location:
+  
+  ![Image](./images/filename.png)
+  
+  ========================
+  IMPORTANT RESTRICTIONS
+  ========================
+  - Do NOT hallucinate facts not supported by the JSON.
+  - Do NOT translate YAML front matter.
+  - Do NOT include "(English)" in section titles.
+  - Do NOT include emojis except for star-conversion in Importance.
+  `.trim();
+  
 
   // ユーザー入力として question.json をそのまま渡す
   const userInput = JSON.stringify(q, null, 2);
