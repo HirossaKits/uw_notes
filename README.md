@@ -1,12 +1,12 @@
 ## セットアップ
 
-依存関係のインストール:
+依存関係のインストール
 
 ```sh
 npm install
 ```
 
-Playwright のブラウザをインストール:
+Playwright のブラウザをインストール
 
 ```sh
 npx playwright install
@@ -14,15 +14,19 @@ npx playwright install
 
 ## 実行
 
-TypeScript を直接実行（推奨）:
+UWorld から情報を取得して JSON を作成
 
 ```sh
-npm run dev
-# または
 npm start
 ```
 
-TypeScript をコンパイルしてから実行:
+JSON から markdown の要約を作成
+
+```sh
+npm run gen:md
+```
+
+TypeScript をコンパイルしてから実行
 
 ```sh
 npm run build
@@ -31,19 +35,19 @@ node dist/extract.js
 
 ## コード品質
 
-フォーマット:
+フォーマット
 
 ```sh
 npm run format
 ```
 
-リント:
+リント
 
 ```sh
 npm run lint
 ```
 
-フォーマットとリントを同時に実行（推奨）:
+フォーマットとリントを同時に実行
 
 ```sh
 npm run check
