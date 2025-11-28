@@ -7,15 +7,11 @@ import { markdownToBlocks } from "@tryfabric/martian";
 
 dotenv.config();
 
-const NOTION_TOKEN = process.env.NOTION_TOKEN;
-const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
+const NOTION_TOKEN = process.env.NOTION_TOKEN!;
+const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID!;
 
-if (!NOTION_TOKEN) {
-  throw new Error("❌ NOTION_TOKEN is missing in .env");
-}
-if (!NOTION_DATABASE_ID) {
-  throw new Error("❌ NOTION_DATABASE_ID is missing in .env");
-}
+if (!NOTION_TOKEN) throw new Error("❌ NOTION_TOKEN is missing in .env");
+if (!NOTION_DATABASE_ID) throw new Error("❌ NOTION_DATABASE_ID is missing in .env");
 
 const notion = new Client({ auth: NOTION_TOKEN });
 
@@ -25,7 +21,6 @@ const notion = new Client({ auth: NOTION_TOKEN });
 function extractYamlFrontMatter(markdown: string): Record<string, any> {
   const match = markdown.match(/^---\n([\s\S]+?)\n---/);
   if (!match) return {};
-
   const yamlBlock = match[1];
   const result: Record<string, any> = {};
 
@@ -38,25 +33,81 @@ function extractYamlFrontMatter(markdown: string): Record<string, any> {
   return result;
 }
 
-/**
- * Publish ONE question folder:
- * - markdown
- * - images/
- */
+/* -------------------------
+  Step 1: convert <details> → H3 placeholder
+------------------------- */
+function preprocessMarkdown(md: string): string {
+  return md.replace(
+    /<details>\s*<summary>日本語訳を表示<\/summary>\s*([\s\S]*?)<\/details>/g,
+    (_m, inner) => `### 日本語訳を表示\n\n${inner.trim()}\n`
+  );
+}
+
+/* -------------------------
+  Step 2: Convert H3 → Notion toggle
+  Rule:
+    - Heading_3 "日本語訳を表示"
+    - → 次の heading（H2 or H3）の直前までのブロックを children にする
+------------------------- */
+function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectRequest[] {
+  const output: BlockObjectRequest[] = [];
+  let i = 0;
+
+  while (i < blocks.length) {
+    const block = blocks[i];
+
+    const isTarget =
+      block.type === "heading_3" &&
+      block.heading_3?.rich_text?.[0]?.text?.content === "日本語訳を表示";
+
+    if (!isTarget) {
+      output.push(block);
+      i++;
+      continue;
+    }
+
+    // Found translation start
+    const toggleChildren: BlockObjectRequest[] = [];
+    i++; // skip the heading_3
+
+    // Collect all blocks until next heading (H2 or H3)
+    while (
+      i < blocks.length &&
+      !(
+        blocks[i].type === "heading_2" ||
+        blocks[i].type === "heading_3"
+      )
+    ) {
+      toggleChildren.push(blocks[i]);
+      i++;
+    }
+
+    // Create toggle
+    output.push({
+      object: "block",
+      type: "toggle",
+      toggle: {
+        rich_text: [
+          { type: "text", text: { content: "日本語訳を表示" } }
+        ],
+        children: toggleChildren
+      }
+    });
+  }
+
+  return output;
+}
+
+/* -------------------------
+  Publish one markdown
+------------------------- */
 export async function publishToNotion(mdPath: string) {
   console.log(`\n📤 Publishing: ${mdPath}`);
 
-  if (!fs.existsSync(mdPath)) {
-    throw new Error(`Markdown not found: ${mdPath}`);
-  }
+  let markdown = fs.readFileSync(mdPath, "utf8");
 
-  const markdown = fs.readFileSync(mdPath, "utf8");
-
-  // -------------------------
-  // 1. Parse YAML Front Matter
-  // -------------------------
+  // Extract front matter
   const front = extractYamlFrontMatter(markdown);
-
   const id = front["id"];
   const subject = front["subject"];
   const system = front["system"];
@@ -66,97 +117,59 @@ export async function publishToNotion(mdPath: string) {
   const url = front["sourceUrl"] || front["url"] || null;
 
   const tags = tagsRaw
-    ? tagsRaw.replace("[", "").replace("]", "").split(",")
-        .map((t) => t.replace(/"/g, "").trim())
+    ? tagsRaw.replace("[", "").replace("]", "").split(",").map((t) => t.replace(/"/g, "").trim())
     : [];
 
-  // -------------------------
-  // 2. Clean markdown (remove YAML block)
-  // -------------------------
-  const cleanedMarkdown = markdown.replace(/^---[\s\S]+?---/, "").trim();
+  // Remove YAML
+  markdown = markdown.replace(/^---[\s\S]+?---/, "").trim();
 
-  // -------------------------
-  // 3. Convert markdown → Notion blocks
-  // -------------------------
-  const blocks = (await markdownToBlocks(cleanedMarkdown)) as BlockObjectRequest[];
+  // PREPROCESS details → H3
+  markdown = preprocessMarkdown(markdown);
 
-  // -------------------------
-  // 4. Title = first H1
-  // -------------------------
-  const firstLine = cleanedMarkdown
-    .split("\n")
-    .find((line) => line.startsWith("# "))
-    ?.replace(/^#\s*/, "")
-    .trim() || topic || "Untitled";
+  // Convert markdown → notion blocks
+  const notionBlocks = await markdownToBlocks(markdown) as BlockObjectRequest[];
 
-  console.log(`→ 📝 Notion Title: ${firstLine}`);
+  // Convert H3 → toggle (robust version)
+  const finalBlocks = convertHeadingToToggle(notionBlocks);
 
-  // -------------------------
-  // 5. Create page in Notion
-  // -------------------------
+  // Title
+  const firstLine =
+    markdown.split("\n").find((l) => l.startsWith("# "))?.replace(/^#\s*/, "") ||
+    topic ||
+    "Untitled";
+
+  // Upload to Notion
   const response = await notion.pages.create({
     parent: { database_id: NOTION_DATABASE_ID },
     properties: {
-      Name: {
-        title: [{ text: { content: firstLine } }],
-      },
-      Subject: subject
-        ? { rich_text: [{ text: { content: subject } }] }
-        : undefined,
-      System: system
-        ? { rich_text: [{ text: { content: system } }] }
-        : undefined,
-      Topic: topic
-        ? { rich_text: [{ text: { content: topic } }] }
-        : undefined,
-      Importance: {
-        number: importance,
-      },
-      Tags: {
-        multi_select: tags.map((t) => ({ name: t })),
-      },
+      Name: { title: [{ text: { content: firstLine } }] },
+      Subject: subject ? { rich_text: [{ text: { content: subject } }] } : undefined,
+      System: system ? { rich_text: [{ text: { content: system } }] } : undefined,
+      Topic: topic ? { rich_text: [{ text: { content: topic } }] } : undefined,
+      Importance: { number: importance },
+      Tags: { multi_select: tags.map((t) => ({ name: t })) },
       Source: url ? { url } : undefined,
       QuestionId: id ? { number: Number(id) } : undefined,
     },
-    children: blocks,
+    children: finalBlocks,
   });
 
-  const pageUrl =
-    "url" in response
-      ? response.url
-      : `https://notion.so/${response.id.replace(/-/g, "")}`;
-
-  console.log(`✔ Published: ${pageUrl}\n`);
-
-  return pageUrl;
+  console.log("✔ Published:", response.url);
 }
 
 /**
- * MAIN — publish all questions in uw_notes/questions/{id}/{id}.md
+ * MAIN — publish all markdowns
  */
 async function main() {
-  const questionsRoot = path.resolve("uw_notes/questions");
-
-  if (!fs.existsSync(questionsRoot)) {
-    console.error("❌ questions directory not found.");
-    process.exit(1);
-  }
-
-  const folders = fs.readdirSync(questionsRoot);
+  const root = "uw_notes/questions";
+  const folders = fs.readdirSync(root);
 
   for (const folder of folders) {
-    const mdPath = path.join(questionsRoot, folder, `${folder}.md`);
+    const mdPath = path.join(root, folder, `${folder}.md`);
     if (fs.existsSync(mdPath)) {
       await publishToNotion(mdPath);
-    } else {
-      console.warn(`⚠ No markdown found for question ${folder}`);
     }
   }
-
-  console.log("🎉 All questions published to Notion!");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch(console.error);
