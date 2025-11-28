@@ -137,11 +137,11 @@ export async function generateMarkdownForQuestion(
   ## Meta
   Format exactly like:
   
-  Importance: ★★☆☆☆☆☆☆☆☆   (convert importance 1–10 into stars)
-  Subject: {subject}
-  System: {system}
-  Topic: {topic}
-  Source URL: {url}
+  - Importance: ★★☆☆☆☆☆☆☆☆   (convert importance 1–10 into stars)
+  - Subject: {subject}
+  - System: {system}
+  - Topic: {topic}
+  - Source URL: {url}
   
   ========================
   IMAGES
