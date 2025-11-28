@@ -33,9 +33,9 @@ function extractYamlFrontMatter(markdown: string): Record<string, any> {
   return result;
 }
 
-/* -------------------------
-  Step 1: convert <details> → H3 placeholder
-------------------------- */
+/**
+*  Convert <details> to H3 placeholder
+*/
 function preprocessMarkdown(md: string): string {
   return md.replace(
     /<details>\s*<summary>日本語訳を表示<\/summary>\s*([\s\S]*?)<\/details>/g,
@@ -43,12 +43,12 @@ function preprocessMarkdown(md: string): string {
   );
 }
 
-/* -------------------------
-  Step 2: Convert H3 → Notion toggle
+/**
+  Convert H3 to Notion toggle
   Rule:
     - Heading_3 "日本語訳を表示"
-    - → 次の heading（H2 or H3）の直前までのブロックを children にする
-------------------------- */
+    - Convert the blocks until the next heading (H2 or H3) to the children of the toggle
+*/
 function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectRequest[] {
   const output: BlockObjectRequest[] = [];
   let i = 0;
