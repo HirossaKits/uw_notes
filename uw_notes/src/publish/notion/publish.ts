@@ -1,7 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Client } from "@notionhq/client";
-import type { BlockObjectRequest, BlockObjectRequestWithoutChildren, FileUploadObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import type {
+  BlockObjectRequest,
+  BlockObjectRequestWithoutChildren,
+} from "@notionhq/client/build/src/api-endpoints";
 import dotenv from "dotenv";
 import { markdownToBlocks } from "@tryfabric/martian";
 
@@ -41,59 +44,53 @@ function getMimeType(filename: string): string {
     'png': 'image/png',
     'gif': 'image/gif',
     'webp': 'image/webp',
-    'pdf': 'application/pdf',
-    'txt': 'text/plain',
-    'mp4': 'video/mp4',
-    'mp3': 'audio/mpeg'
   };
   return types[ext || ''] || 'application/octet-stream';
 }
 
-async function uploadImagesAndReplacePaths(
+/**
+ * Convert markdown image tags into Notion image blocks (base64)
+ */
+function extractImageBlocks(
   md: string,
   imageDir: string
-): Promise<{updatedMarkdown: string, uploadedFiles: FileUploadObjectResponse[]}> {
+): { cleanedMarkdown: string; imageBlocks: BlockObjectRequest[] } {
   const imageRegex = /!\[.*?\]\((\.\/images\/[^\)]+)\)/g;
 
+  let cleanedMarkdown = md;
+  const imageBlocks: BlockObjectRequest[] = [];
+
   let match;
-  let updatedMarkdown = md;
-  const uploadedFiles: FileUploadObjectResponse[] = [];
-
   while ((match = imageRegex.exec(md)) !== null) {
-    const filename = path.join(imageDir, match[1]);
+    const relPath = match[1];            // "./images/xxx.png"
+    const absPath = path.join(imageDir, relPath);
 
-    if (!fs.existsSync(filename)) continue;
+    if (!fs.existsSync(absPath)) continue;
 
-    const mimeType = getMimeType(filename);
-    console.log(`📤 Uploading: ${filename} (${mimeType})`);
+    const mime = getMimeType(absPath);
+    const base64 = fs.readFileSync(absPath).toString("base64");
 
-    // ファイルアップロード
-    const fileUpload = await notion.fileUploads.create({ mode: "single_part" });
-    const uploadedFile = await notion.fileUploads.send({
-      file_upload_id: fileUpload.id,
-      file: {
-        filename: filename,
-        data: new Blob([await fs.openAsBlob(filename)], { type: mimeType }),
-      },
+    // Create image block
+    imageBlocks.push({
+      object: "block",
+      type: "image",
+      image: {
+        type: "file",
+        file: {
+          url: `data:${mime};base64,${base64}`
+        }
+      }
     });
-    uploadedFiles.push(uploadedFile);
+
+    // Remove the markdown line containing the image
+    cleanedMarkdown = cleanedMarkdown.replace(match[0], "");
   }
-  return {updatedMarkdown, uploadedFiles};
+
+  return { cleanedMarkdown, imageBlocks };
 }
 
 /**
- * Remove children property from BlockObjectRequest to create BlockObjectRequestWithoutChildren
- */
-function removeChildrenFromBlock(
-  block: BlockObjectRequest
-): BlockObjectRequestWithoutChildren {
-  const blockCopy = JSON.parse(JSON.stringify(block));
-  delete blockCopy.children;
-  return blockCopy;
-}
-
-/**
- *  Convert <details> to H3 placeholder
+ * Convert <details> to H3 placeholder
  */
 function preprocessMarkdown(md: string): string {
   return md.replace(
@@ -104,9 +101,6 @@ function preprocessMarkdown(md: string): string {
 
 /**
   Convert H3 to Notion toggle
-  Rule:
-    - Heading_3 "日本語訳を表示"
-    - Convert the blocks until the next heading (H2 or H3) to the children of the toggle
 */
 function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectRequest[] {
   const output: BlockObjectRequest[] = [];
@@ -126,32 +120,26 @@ function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectReques
       continue;
     }
 
-    // Found translation start
     const toggleChildren: BlockObjectRequestWithoutChildren[] = [];
-    i++; // skip the heading_3
+    i++;
 
-    // Collect all blocks until next heading (H2 or H3)
     while (
       i < blocks.length &&
-      !(
-        blocks[i].type === "heading_2" ||
-        blocks[i].type === "heading_3"
-      )
+      !(blocks[i].type === "heading_2" || blocks[i].type === "heading_3")
     ) {
-      toggleChildren.push(removeChildrenFromBlock(blocks[i]));
+      const copy = JSON.parse(JSON.stringify(blocks[i]));
+      delete copy.children;
+      toggleChildren.push(copy);
       i++;
     }
 
-    // Create toggle
     output.push({
       object: "block",
       type: "toggle",
       toggle: {
-        rich_text: [
-          { type: "text", text: { content: "日本語訳を表示" } }
-        ],
-        children: toggleChildren
-      }
+        rich_text: [{ type: "text", text: { content: "日本語訳を表示" } }],
+        children: toggleChildren,
+      },
     });
   }
 
@@ -166,7 +154,6 @@ export async function publishToNotion(mdPath: string) {
 
   let markdown = fs.readFileSync(mdPath, "utf8");
 
-  // Extract front matter
   const front = extractYamlFrontMatter(markdown);
   const id = front["id"];
   const subject = front["subject"];
@@ -180,29 +167,27 @@ export async function publishToNotion(mdPath: string) {
     ? tagsRaw.replace("[", "").replace("]", "").split(",").map((t) => t.replace(/"/g, "").trim())
     : [];
 
-  // Remove YAML
   markdown = markdown.replace(/^---[\s\S]+?---/, "").trim();
 
-  // PREPROCESS details → H3
   markdown = preprocessMarkdown(markdown);
 
-  // Upload images and replace paths
+  // -------- IMAGE PROCESSING (New) --------
   const imageDir = path.dirname(mdPath);
-  const {updatedMarkdown, uploadedFiles} = await uploadImagesAndReplacePaths(markdown, imageDir);
+  const { cleanedMarkdown, imageBlocks } = extractImageBlocks(markdown, imageDir);
 
-  // Convert markdown → notion blocks
-  const notionBlocks = markdownToBlocks(updatedMarkdown) as BlockObjectRequest[];
+  // -------- MARKDOWN → BLOCKS --------
+  const notionBlocks = markdownToBlocks(cleanedMarkdown) as BlockObjectRequest[];
 
-  // Convert H3 → toggle (robust version)
   const finalBlocks = convertHeadingToToggle(notionBlocks);
 
-  // Title
+  // 画像ブロックを最後に追加（順序を維持）
+  finalBlocks.push(...imageBlocks);
+
   const firstLine =
-    markdown.split("\n").find((l) => l.startsWith("# "))?.replace(/^#\s*/, "") ||
+    cleanedMarkdown.split("\n").find((l) => l.startsWith("# "))?.replace(/^#\s*/, "") ||
     topic ||
     "Untitled";
 
-  // Upload to Notion
   const response = await notion.pages.create({
     parent: { database_id: NOTION_DATABASE_ID },
     properties: {
@@ -214,20 +199,11 @@ export async function publishToNotion(mdPath: string) {
       Tags: { multi_select: tags.map((t) => ({ name: t })) },
       Source: url ? { url } : undefined,
       QuestionId: id ? { number: Number(id) } : undefined,
-      Files: {
-        files: uploadedFiles.map((file) => ({
-          type: 'file_upload',
-          file_upload: { id: file.id },
-          name: file.filename
-        }))
-      }
     },
     children: finalBlocks,
   });
 
-  if ("url" in response) {
-    console.log("✔ Published:", response.url);
-  } 
+  console.log("✔ Published:", response.url);
 }
 
 /**
