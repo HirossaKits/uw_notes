@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Client } from "@notionhq/client";
-import type { BlockObjectRequest } from "@notionhq/client/build/src/api-endpoints";
+import type { BlockObjectRequest, BlockObjectRequestWithoutChildren, FileUploadObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import dotenv from "dotenv";
 import { markdownToBlocks } from "@tryfabric/martian";
 
@@ -33,9 +33,68 @@ function extractYamlFrontMatter(markdown: string): Record<string, any> {
   return result;
 }
 
+function getMimeType(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop();
+  const types: Record<string, string> = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'pdf': 'application/pdf',
+    'txt': 'text/plain',
+    'mp4': 'video/mp4',
+    'mp3': 'audio/mpeg'
+  };
+  return types[ext || ''] || 'application/octet-stream';
+}
+
+async function uploadImagesAndReplacePaths(
+  md: string,
+  imageDir: string
+): Promise<{updatedMarkdown: string, uploadedFiles: FileUploadObjectResponse[]}> {
+  const imageRegex = /!\[.*?\]\((\.\/images\/[^\)]+)\)/g;
+
+  let match;
+  let updatedMarkdown = md;
+  const uploadedFiles: FileUploadObjectResponse[] = [];
+
+  while ((match = imageRegex.exec(md)) !== null) {
+    const filename = path.join(imageDir, match[1]);
+
+    if (!fs.existsSync(filename)) continue;
+
+    const mimeType = getMimeType(filename);
+    console.log(`📤 Uploading: ${filename} (${mimeType})`);
+
+    // ファイルアップロード
+    const fileUpload = await notion.fileUploads.create({ mode: "single_part" });
+    const uploadedFile = await notion.fileUploads.send({
+      file_upload_id: fileUpload.id,
+      file: {
+        filename: filename,
+        data: new Blob([await fs.openAsBlob(filename)], { type: mimeType }),
+      },
+    });
+    uploadedFiles.push(uploadedFile);
+  }
+  return {updatedMarkdown, uploadedFiles};
+}
+
 /**
-*  Convert <details> to H3 placeholder
-*/
+ * Remove children property from BlockObjectRequest to create BlockObjectRequestWithoutChildren
+ */
+function removeChildrenFromBlock(
+  block: BlockObjectRequest
+): BlockObjectRequestWithoutChildren {
+  const blockCopy = JSON.parse(JSON.stringify(block));
+  delete blockCopy.children;
+  return blockCopy;
+}
+
+/**
+ *  Convert <details> to H3 placeholder
+ */
 function preprocessMarkdown(md: string): string {
   return md.replace(
     /<details>\s*<summary>日本語訳を表示<\/summary>\s*([\s\S]*?)<\/details>/g,
@@ -58,6 +117,7 @@ function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectReques
 
     const isTarget =
       block.type === "heading_3" &&
+      block.heading_3?.rich_text?.[0]?.type === "text" &&
       block.heading_3?.rich_text?.[0]?.text?.content === "日本語訳を表示";
 
     if (!isTarget) {
@@ -67,7 +127,7 @@ function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectReques
     }
 
     // Found translation start
-    const toggleChildren: BlockObjectRequest[] = [];
+    const toggleChildren: BlockObjectRequestWithoutChildren[] = [];
     i++; // skip the heading_3
 
     // Collect all blocks until next heading (H2 or H3)
@@ -78,7 +138,7 @@ function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectReques
         blocks[i].type === "heading_3"
       )
     ) {
-      toggleChildren.push(blocks[i]);
+      toggleChildren.push(removeChildrenFromBlock(blocks[i]));
       i++;
     }
 
@@ -98,9 +158,9 @@ function convertHeadingToToggle(blocks: BlockObjectRequest[]): BlockObjectReques
   return output;
 }
 
-/* -------------------------
-  Publish one markdown
-------------------------- */
+/**
+ * Publish one markdown
+ */
 export async function publishToNotion(mdPath: string) {
   console.log(`\n📤 Publishing: ${mdPath}`);
 
@@ -126,8 +186,12 @@ export async function publishToNotion(mdPath: string) {
   // PREPROCESS details → H3
   markdown = preprocessMarkdown(markdown);
 
+  // Upload images and replace paths
+  const imageDir = path.dirname(mdPath);
+  const {updatedMarkdown, uploadedFiles} = await uploadImagesAndReplacePaths(markdown, imageDir);
+
   // Convert markdown → notion blocks
-  const notionBlocks = await markdownToBlocks(markdown) as BlockObjectRequest[];
+  const notionBlocks = markdownToBlocks(updatedMarkdown) as BlockObjectRequest[];
 
   // Convert H3 → toggle (robust version)
   const finalBlocks = convertHeadingToToggle(notionBlocks);
@@ -150,11 +214,20 @@ export async function publishToNotion(mdPath: string) {
       Tags: { multi_select: tags.map((t) => ({ name: t })) },
       Source: url ? { url } : undefined,
       QuestionId: id ? { number: Number(id) } : undefined,
+      Files: {
+        files: uploadedFiles.map((file) => ({
+          type: 'file_upload',
+          file_upload: { id: file.id },
+          name: file.filename
+        }))
+      }
     },
     children: finalBlocks,
   });
 
-  console.log("✔ Published:", response.url);
+  if ("url" in response) {
+    console.log("✔ Published:", response.url);
+  } 
 }
 
 /**

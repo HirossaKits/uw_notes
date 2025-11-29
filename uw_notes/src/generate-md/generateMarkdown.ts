@@ -151,7 +151,9 @@ export async function generateMarkdownForQuestion(
   If JSON.images is non-empty, print each image using Markdown syntax with a
   relative path that works from the Markdown file location:
   
-  ![Image](./images/filename.png)
+  ![Image1](./images/image1.png)
+  ![Image2](./images/image2.png)
+  ...
   
   ========================
   IMPORTANT RESTRICTIONS
