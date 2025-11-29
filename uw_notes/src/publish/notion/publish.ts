@@ -4,6 +4,8 @@ import { Client } from "@notionhq/client";
 import type { BlockObjectRequest, BlockObjectRequestWithoutChildren, FileUploadObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import dotenv from "dotenv";
 import { markdownToBlocks } from "@tryfabric/martian";
+import sharp, { block } from 'sharp';
+import { json } from "node:stream/consumers";
 
 dotenv.config();
 
@@ -49,37 +51,100 @@ function getMimeType(filename: string): string {
   return types[ext || ''] || 'application/octet-stream';
 }
 
-async function uploadImagesAndReplacePaths(
-  md: string,
-  imageDir: string
-): Promise<{updatedMarkdown: string, uploadedFiles: FileUploadObjectResponse[]}> {
-  const imageRegex = /!\[.*?\]\((\.\/images\/[^\)]+)\)/g;
-
-  let match;
-  let updatedMarkdown = md;
-  const uploadedFiles: FileUploadObjectResponse[] = [];
-
-  while ((match = imageRegex.exec(md)) !== null) {
-    const filename = path.join(imageDir, match[1]);
-
-    if (!fs.existsSync(filename)) continue;
-
-    const mimeType = getMimeType(filename);
-    console.log(`📤 Uploading: ${filename} (${mimeType})`);
-
-    // ファイルアップロード
-    const fileUpload = await notion.fileUploads.create({ mode: "single_part" });
-    const uploadedFile = await notion.fileUploads.send({
-      file_upload_id: fileUpload.id,
-        file: {
-        filename: filename,
-        data: new Blob([await fs.openAsBlob(filename)], { type: mimeType }),
-      },
-    });
-    uploadedFiles.push(uploadedFile);
+/**
+ * Compress image to fit within maxSize (in bytes)
+ */
+async function compressImage(
+  filePath: string,
+  maxSize: number = 5 * 1024 * 1024
+): Promise<Buffer> {
+  const stats = fs.statSync(filePath);
+  
+  if (stats.size <= maxSize) {
+    return fs.readFileSync(filePath);
   }
-  return {updatedMarkdown, uploadedFiles};
+
+  let quality = 80;
+  let buffer = await sharp(filePath)
+    .jpeg({ quality })
+    .toBuffer();
+
+  while (buffer.length > maxSize && quality > 10) {
+    quality -= 10;
+    buffer = await sharp(filePath)
+      .jpeg({ quality })
+      .toBuffer();
+  }
+
+  return buffer;
 }
+
+
+/**
+ * Upload image to Notion
+ */
+async function uploadImage(filePath:string): Promise<string> {
+  const fileName = path.basename(filePath);
+  const mimeType = getMimeType(filePath);
+  const compressedBuffer = await compressImage(filePath);
+
+  const fileUpload = await notion.fileUploads.create({
+    mode: 'single_part',
+  });
+
+  const send = await notion.fileUploads.send({
+    file_upload_id: fileUpload.id,
+    file: {
+      filename: fileName,
+      data: new Blob([Buffer.from(compressedBuffer)], { type: mimeType }),
+    },
+  });
+
+  return send.id;
+}
+
+/**
+ * Upload images and replace paths
+ */
+async function uploadImagesAndReplacePaths(
+  blocks: BlockObjectRequest[],
+  imageDir: string
+): Promise<BlockObjectRequest[]> {
+  const imageRegex = /(\.\/images\/[^\s\)]+)/;
+  const updatedBlocks = await Promise.all([...blocks].map(async (block) => {
+    if (block.type !== "paragraph") {
+      return block;
+    }
+
+    if (!block.paragraph.rich_text || block.paragraph.rich_text.length === 0) {
+      return block;
+    }
+
+    if (block.paragraph.rich_text[0].type !== "text") {
+      return block;
+    }
+
+    const match = imageRegex.exec(block.paragraph.rich_text[0].text.content);
+    if (match !== null) {
+      const filename = path.join(imageDir, match[1]);
+      if (!fs.existsSync(filename)) return block;
+      console.log(`📤 Uploading: ${filename}`);
+      const uploadedFileId = await uploadImage(filename);
+
+      return {
+        object: "block",
+        type: "image",
+        image: {
+          type: "file_upload",
+          file_upload: { id: uploadedFileId }
+        }
+      } as BlockObjectRequest;
+    }
+    return block;
+  }));
+  return updatedBlocks;
+}
+
 
 /**
  * Remove children property from BlockObjectRequest to create BlockObjectRequestWithoutChildren
@@ -175,15 +240,16 @@ export async function publishToNotion(mdPath: string) {
   // PREPROCESS details → H3
   markdown = preprocessMarkdown(markdown);
 
+  // Convert markdown → notion blocks
+  const notionBlocks = markdownToBlocks(markdown) as BlockObjectRequest[];
+
   // Upload images and replace paths
   const imageDir = path.dirname(mdPath);
-  const {updatedMarkdown, uploadedFiles} = await uploadImagesAndReplacePaths(markdown, imageDir);
-
-  // Convert markdown → notion blocks
-  const notionBlocks = markdownToBlocks(updatedMarkdown) as BlockObjectRequest[];
+  const updatedBlocks = await uploadImagesAndReplacePaths(notionBlocks, imageDir);
 
   // Convert H3 → toggle (robust version)
-  const finalBlocks = convertHeadingToToggle(notionBlocks);
+  const finalBlocks = convertHeadingToToggle(updatedBlocks);
+
 
   // Title
   const firstLine =
@@ -203,15 +269,8 @@ export async function publishToNotion(mdPath: string) {
       Tags: { multi_select: tags.map((t) => ({ name: t })) },
       Source: url ? { url } : undefined,
       QuestionId: id ? { number: Number(id) } : undefined,
-      Files: {
-        files: uploadedFiles.map((file) => ({
-          type: 'file_upload',
-          file_upload: { id: file.id },
-          name: file.filename
-        }))
-      }
     },
-    children: finalBlocks,
+    children: updatedBlocks,
   });
 
   if ("url" in response) {
