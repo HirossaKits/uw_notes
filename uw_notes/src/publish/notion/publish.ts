@@ -243,12 +243,11 @@ export async function publishToNotion(mdPath: string) {
   // Convert markdown → notion blocks
   const notionBlocks = markdownToBlocks(markdown) as BlockObjectRequest[];
 
-  // Upload images and replace paths
-  const imageDir = path.dirname(mdPath);
-  const updatedBlocks = await uploadImagesAndReplacePaths(notionBlocks, imageDir);
-
   // Convert H3 → toggle (robust version)
-  const finalBlocks = convertHeadingToToggle(updatedBlocks);
+  const updatedBlocks = convertHeadingToToggle(notionBlocks);
+
+  // Upload images and replace paths
+  const finalBlocks = await uploadImagesAndReplacePaths(updatedBlocks, path.dirname(mdPath));
 
 
   // Title
@@ -270,7 +269,7 @@ export async function publishToNotion(mdPath: string) {
       Source: url ? { url } : undefined,
       QuestionId: id ? { number: Number(id) } : undefined,
     },
-    children: updatedBlocks,
+    children: finalBlocks,
   });
 
   if ("url" in response) {
