@@ -3,7 +3,7 @@ import 'dotenv/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import OpenAI from 'openai';
-import type { UWorldExtraction } from '../extractor/extractUWorldReview';
+import type { UWorldExtraction } from '../extract/extractUWorldReview';
 import { generateMarkdownForQuestion } from './generateMarkdown';
 
 const QUESTIONS_ROOT = path.resolve(process.cwd(), 'uw_notes/questions');

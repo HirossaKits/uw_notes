@@ -23,9 +23,12 @@
     "@azure/core-auth": "^1.10.1",
     "@notionhq/client": "^5.4.0",
     "@tryfabric/martian": "^1.2.4",
+    "better-sqlite3": "^12.5.0",
+    "canvas": "^3.2.0",
     "dotenv": "^17.2.3",
     "gray-matter": "^4.0.3",
     "openai": "^6.9.1",
+    "pdfjs-dist": "^5.4.449",
     "playwright": "^1.56.1",
     "sharp": "^0.34.5"
   },

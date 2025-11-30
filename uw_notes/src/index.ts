@@ -1,6 +1,6 @@
-import { connectToChrome } from './extractor/connect';
-import { findUWorldPage } from './extractor/findUWorldTab';
-import { extractUWorldReview } from './extractor/extractUWorldReview';
+import { connectToChrome } from './extract/connect';
+import { findUWorldPage } from './extract/findUWorldTab';
+import { extractUWorldReview } from './extract/extractUWorldReview';
 import { saveExtraction } from './output/save';
 
 async function main() {
