@@ -26,3 +26,6 @@ uw_notes/images/
 
 # .env
 .env
+
+# PDF Documents
+public/*.pdf
