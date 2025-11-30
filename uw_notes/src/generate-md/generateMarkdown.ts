@@ -68,6 +68,19 @@ export async function generateMarkdownForQuestion(
   
   Generate a clear, human-readable title summarizing the question’s main idea.
   Do NOT include the question ID.
+
+  ========================
+  META SECTION
+  ========================
+  
+  ## Meta
+  Format exactly like:
+  
+  - Importance: ★★☆☆☆☆☆☆☆☆   (convert importance 1–10 into stars)
+  - Subject: {subject}
+  - System: {system}
+  - Topic: {topic}
+  - Source URL: {url}
   
   ========================
   SECTION RULES
@@ -121,6 +134,11 @@ export async function generateMarkdownForQuestion(
   - Correct option: **{correctOptionId}** {text}
   - Your answer: **{userOptionId}** {text or "(not answered)"}
   
+  Then add a collapsible section translating the Answers.
+
+  ## Answers Explanation
+  Write the answers explanation.
+  
   Then add a collapsible section translating the Answers explanation.
   
   ## Key Points (What to memorize)
@@ -129,19 +147,6 @@ export async function generateMarkdownForQuestion(
   - Highlight important terms using **bold** markup.
   
   Then add a collapsible Japanese translation of ALL key points.
-  
-  ========================
-  META SECTION
-  ========================
-  
-  ## Meta
-  Format exactly like:
-  
-  - Importance: ★★☆☆☆☆☆☆☆☆   (convert importance 1–10 into stars)
-  - Subject: {subject}
-  - System: {system}
-  - Topic: {topic}
-  - Source URL: {url}
   
   ========================
   IMAGES
