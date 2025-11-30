@@ -38,6 +38,7 @@ export async function analyzePdfLayout(pdfPath: string): Promise<AnalyzeResultOu
     .post({
       contentType: "application/pdf",
       body: pdfData,
+      queryParameters: { outputContentFormat: "markdown" },
     });
 
   if (isUnexpected(initialResponse)) {
@@ -60,10 +61,10 @@ export async function analyzePdfLayout(pdfPath: string): Promise<AnalyzeResultOu
 
 
 async function main() {
-  const pdfPath = path.join(process.cwd(), 'public', '000072734.pdf');
+  const pdfPath = path.join(process.cwd(), 'public', 'template_pdf_a4.pdf');
   const result = await analyzePdfLayout(pdfPath);
   const json = JSON.stringify(result, null, 2);
-  await fs.promises.writeFile(path.join(process.cwd(), 'public', '000072734.json'), json);
+  await fs.promises.writeFile(path.join(process.cwd(), 'public', 'template_pdf_a4.json'), json);
 }
 
 main().catch(console.error);
