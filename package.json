@@ -9,6 +9,7 @@
     "dev": "tsx uw_notes/src/index.ts",
     "gen:md": "tsx uw_notes/src/generate-md/run.ts",
     "publish:notion": "tsx uw_notes/src/publish/notion/publish.ts",
+    "analyze:pdf": "tsx uw_notes/src/indexer/analyzePdf.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
@@ -18,6 +19,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@azure-rest/ai-document-intelligence": "^1.1.0",
+    "@azure/core-auth": "^1.10.1",
     "@notionhq/client": "^5.4.0",
     "@tryfabric/martian": "^1.2.4",
     "dotenv": "^17.2.3",
