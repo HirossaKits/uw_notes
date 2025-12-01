@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import { analyzePdfLayout } from './analyzePdf';
 import { createChunksFromLayout, embedChunks } from './embeddings';
 import { extractPngFromPdf } from './clipPdf';
+import { createDatabase } from '@/db/createDatabase';
+import { saveChunks } from '@/db/saveChunks';
 
 dotenv.config();
 
@@ -16,26 +18,32 @@ if (!OPENAI_API_KEY) {
 async function main() {
   const pdfPath = path.join(process.cwd(), 'public', '000072734.pdf');
   
+  console.log('📄 Analyzing PDF...');
   const result = await analyzePdfLayout(pdfPath); // markdown + layout data
+  console.log('✂️ Creating chunks...');
   const chunks = createChunksFromLayout(result); // paragraph chunks
-  
+  console.log('✨ Embedding chunks...');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
   const embedded = await embedChunks(client, chunks); // store with metadata
 
-  // chunksディレクトリを作成
-  const chunksDir = path.join(process.cwd(), 'chunks');
-  if (!fs.existsSync(chunksDir)) {
-    fs.mkdirSync(chunksDir, { recursive: true });
-  }
+  console.log('💾 Saving chunks...');
+  const db = createDatabase()
+  saveChunks(db, embedded, pdfPath);
 
-  for (const meta of embedded) {
-    await extractPngFromPdf(
-      pdfPath,
-      meta.metadata.startPage,
-      meta.metadata.bboxStart,
-      path.join(chunksDir, `${meta.metadata.startPage}_${meta.metadata.textStartOffset}.png`)
-    );
-  }
+  // chunksディレクトリを作成
+  // const chunksDir = path.join(process.cwd(), 'chunks');
+  // if (!fs.existsSync(chunksDir)) {
+  //   fs.mkdirSync(chunksDir, { recursive: true });
+  // }
+
+  // for (const meta of embedded) {
+  //   await extractPngFromPdf(
+  //     pdfPath,
+  //     meta.metadata.startPage,
+  //     meta.metadata.bboxStart,
+  //     path.join(chunksDir, `${meta.metadata.startPage}_${meta.metadata.textStartOffset}.png`)
+  //   );
+  // }
 }
 
 main().catch(console.error);

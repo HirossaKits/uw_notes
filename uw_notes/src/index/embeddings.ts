@@ -11,6 +11,19 @@ type Chunk = {
   bboxEnd: number[];
 };
 
+export type EmbeddedChunk = {
+  text: string;
+  embedding: number[];
+  metadata: {
+    startPage: number;
+    endPage: number;
+    bboxStart: number[];
+    bboxEnd: number[];
+    textStartOffset: number;
+    textEndOffset: number;
+  };
+};
+
 export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
   if (!result.paragraphs) return [];
 
@@ -32,8 +45,8 @@ export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
   });
 }
 
-export async function embedChunks(client: OpenAI, chunks: Chunk[]) {
-  const embedded = [];
+export async function embedChunks(client: OpenAI, chunks: Chunk[]): Promise<EmbeddedChunk[]> {
+  const embedded: EmbeddedChunk[] = [];
 
   for (const c of chunks) {
     const embedding = await client.embeddings.create({
@@ -42,6 +55,7 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[]) {
     });
 
     embedded.push({
+      text: c.text,
       embedding: embedding.data[0].embedding,
       metadata: {
         startPage: c.startPage,
@@ -51,7 +65,6 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[]) {
         textStartOffset: c.startOffset,
         textEndOffset: c.endOffset,
       },
-      text: c.text,
     });
   }
 

@@ -1,6 +1,15 @@
 import sharp from "sharp";
-import { getDocument } from "pdfjs-dist";
-import { createCanvas } from "canvas";
+import { createCanvas, Image } from "@napi-rs/canvas";
+// legacyビルドを使用（Node.js環境用）
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+
+// Node.js環境でImageをグローバルに設定
+// @napi-rs/canvasのImageをpdfjs-distが使用できるようにする
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+if (typeof (globalThis as any).Image === 'undefined') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).Image = Image;
+}
 
 export class NodeCanvasFactory {
   create(width: number, height: number) {
@@ -45,16 +54,16 @@ export async function extractPngFromPdf(
 
   await pdfPage.render(renderContext).promise;
 
-  const buffer = canvas.canvas.toBuffer();
+  const buffer = canvas.canvas.toBuffer('image/png');
 
   // polygon → 最小矩形に変換
   const xs = [polygon[0], polygon[2], polygon[4], polygon[6]];
   const ys = [polygon[1], polygon[3], polygon[5], polygon[7]];
 
-  const left = Math.min(...xs);
-  const top = Math.min(...ys);
-  const width = Math.max(...xs) - left;
-  const height = Math.max(...ys) - top;
+  const left = Math.floor(Math.min(...xs));
+  const top = Math.floor(Math.min(...ys));
+  const width = Math.ceil(Math.max(...xs) - left);
+  const height = Math.ceil(Math.max(...ys) - top);
 
   // sharp で切り抜き
   await sharp(buffer)

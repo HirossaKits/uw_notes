@@ -10,6 +10,7 @@
     "gen:md": "tsx uw_notes/src/generate-md/run.ts",
     "publish:notion": "tsx uw_notes/src/publish/notion/publish.ts",
     "analyze:pdf": "tsx uw_notes/src/indexer/analyzePdf.ts",
+    "index": "tsx uw_notes/src/index/run.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
@@ -21,16 +22,17 @@
   "dependencies": {
     "@azure-rest/ai-document-intelligence": "^1.1.0",
     "@azure/core-auth": "^1.10.1",
+    "@napi-rs/canvas": "^0.1.83",
     "@notionhq/client": "^5.4.0",
     "@tryfabric/martian": "^1.2.4",
     "better-sqlite3": "^12.5.0",
-    "canvas": "^3.2.0",
     "dotenv": "^17.2.3",
     "gray-matter": "^4.0.3",
     "openai": "^6.9.1",
     "pdfjs-dist": "^5.4.449",
     "playwright": "^1.56.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "sqlite-vec": "^0.1.7-alpha.2"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
