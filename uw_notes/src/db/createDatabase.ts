@@ -15,15 +15,8 @@ export function createDatabase() {
 
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS vec_items USING vec0(
-      text TEXT,
       embedding float[3072],
-      start_page INTEGER,
-      end_page INTEGER,
-      bbox_start TEXT,
-      bbox_end TEXT,
-      start_offset INTEGER,
-      end_offset INTEGER,
-      source TEXT
+          meta TEXT
     );
   `);
 

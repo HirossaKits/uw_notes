@@ -58,13 +58,3 @@ export async function analyzePdfLayout(pdfPath: string): Promise<AnalyzeResultOu
   // Return JSON result
   return result.analyzeResult;
 }
-
-
-async function main() {
-  const pdfPath = path.join(process.cwd(), 'public', 'template_pdf_a4.pdf');
-  const result = await analyzePdfLayout(pdfPath);
-  const json = JSON.stringify(result, null, 2);
-  await fs.promises.writeFile(path.join(process.cwd(), 'public', 'template_pdf_a4.json'), json);
-}
-
-main().catch(console.error);

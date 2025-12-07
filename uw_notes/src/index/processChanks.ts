@@ -1,3 +1,4 @@
+import { crateEmbedding } from "@/llm/embedding";
 import { AnalyzeResultOutput } from "@azure-rest/ai-document-intelligence";
 import OpenAI from "openai";
 
@@ -32,6 +33,7 @@ export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
   return paragraphs.map((p) => {
     const span = p.spans?.[0];
     const bounding = p.boundingRegions?.[0];
+    console.log(p.content);
 
     return {
       text: p.content,
@@ -49,14 +51,11 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[]): Promise<Embe
   const embedded: EmbeddedChunk[] = [];
 
   for (const c of chunks) {
-    const embedding = await client.embeddings.create({
-      input: c.text,
-      model: "text-embedding-3-large",
-    });
+    const embedding = await crateEmbedding(c.text); 
 
     embedded.push({
       text: c.text,
-      embedding: embedding.data[0].embedding,
+      embedding: embedding,
       metadata: {
         startPage: c.startPage,
         endPage: c.endPage,
