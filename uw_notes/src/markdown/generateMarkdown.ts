@@ -1,5 +1,5 @@
 // uw_notes/src/generate-md/generateMarkdown.ts
-import type { UWorldExtraction } from '../extract/extractUWorldReview';
+import type { UWorldExtraction } from '../extract/extractUWorld';
 import OpenAI from 'openai';
 
 /**

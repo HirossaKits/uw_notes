@@ -2,9 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
-import { analyzePdfLayout } from './analyzePdf';
-import { createChunksFromLayout, embedChunks } from './processChanks';
-import { extractPngFromPdf } from './clipPdf';
+import { analyzePdf } from '../pdf/analyzePdf';
+import { createChunksFromLayout, embedChunks } from '../index/processChunks';
+import { extractPngFromPdf } from '../pdf/extractPdf';
 import { createDatabase } from '@/db/createDatabase';
 import { saveChunks } from '@/db/saveChunks';
 
@@ -19,7 +19,7 @@ async function main() {
   const pdfPath = path.join(process.cwd(), 'public', 'usml_2024_1.pdf');
   
   console.log('📄 Analyzing PDF...');
-  const result = await analyzePdfLayout(pdfPath); // markdown + layout data
+  const result = await analyzePdf(pdfPath); // markdown + layout data
   console.log('✂️  Creating chunks...');
   const chunks = createChunksFromLayout(result); // paragraph chunks
   console.log('✨ Embedding chunks...');

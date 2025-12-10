@@ -10,7 +10,7 @@ if (!OPENAI_API_KEY) {
 
 const client = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-export async function crateEmbedding(text: string): Promise<number[]> {
+export async function createEmbedding(text: string): Promise<number[]> {
   const embedding = await client.embeddings.create({
     input: text,
     model: "text-embedding-3-large",

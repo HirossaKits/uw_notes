@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { EmbeddedChunk } from '@/index/processChanks';
+import { EmbeddedChunk } from '@/index/processChunks';
 
 
 export function saveChunks(db: Database, embedded: EmbeddedChunk[], source: string) {

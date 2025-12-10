@@ -1,10 +1,9 @@
-// uw_notes/src/generate-md/run.ts
 import 'dotenv/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import OpenAI from 'openai';
-import type { UWorldExtraction } from '../extract/extractUWorldReview';
-import { generateMarkdownForQuestion } from './generateMarkdown';
+import type { UWorldExtraction } from '../extract/extractUWorld';
+import { generateMarkdownForQuestion } from '../markdown/generateMarkdown';
 
 const QUESTIONS_ROOT = path.resolve(process.cwd(), 'uw_notes/questions');
 

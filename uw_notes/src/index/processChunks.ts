@@ -1,4 +1,4 @@
-import { crateEmbedding } from "@/llm/embedding";
+import { createEmbedding } from "@/llm/embedding";
 import { AnalyzeResultOutput } from "@azure-rest/ai-document-intelligence";
 import OpenAI from "openai";
 
@@ -51,7 +51,7 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[]): Promise<Embe
   const embedded: EmbeddedChunk[] = [];
 
   for (const c of chunks) {
-    const embedding = await crateEmbedding(c.text); 
+    const embedding = await createEmbedding(c.text); 
 
     embedded.push({
       text: c.text,

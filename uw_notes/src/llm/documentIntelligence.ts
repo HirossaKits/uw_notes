@@ -1,13 +1,13 @@
-import * as fs from 'node:fs';
 import DocumentIntelligence, {
+  AnalyzeDocumentFromStreamMediaTypesParam,
   AnalyzeResultOutput,
+  DocumentContentFormat,
   getLongRunningPoller,
   isUnexpected,
   type AnalyzeOperationOutput,
 } from '@azure-rest/ai-document-intelligence';
-import { AzureKeyCredential } from '@azure/core-auth';
 import dotenv from 'dotenv';
-import path from 'node:path';
+import { AzureKeyCredential } from '@azure/core-auth';
 
 dotenv.config();
 
@@ -17,28 +17,22 @@ const AZURE_AI_DOC_KEY = process.env.AZURE_AI_DOC_KEY!;
 if (!AZURE_AI_DOC_ENDPOINT) throw new Error("❌ AZURE_DI_ENDPOINT not found");
 if (!AZURE_AI_DOC_KEY) throw new Error("❌ AZURE_DI_KEY not found");
 
-// Layout モデル ID
+// Layout Model ID
 const MODEL_ID = "prebuilt-layout";
 
-/**
- * Convert PDF to JSON
- * using Azure AI Document Intelligence
- */
-export async function analyzePdfLayout(pdfPath: string): Promise<AnalyzeResultOutput> {
-  if (!fs.existsSync(pdfPath)) {
-    throw new Error(`PDF file not found: ${pdfPath}`);
-  }
+const client = DocumentIntelligence(AZURE_AI_DOC_ENDPOINT, new AzureKeyCredential(AZURE_AI_DOC_KEY));
 
-  const pdfData = await fs.promises.readFile(pdfPath);
-  const client = DocumentIntelligence(AZURE_AI_DOC_ENDPOINT, new AzureKeyCredential(AZURE_AI_DOC_KEY));
+export async function analyzeDocument(data: string | Buffer,
+   contentType: AnalyzeDocumentFromStreamMediaTypesParam['contentType'], 
+   outputContentFormat: DocumentContentFormat): Promise<AnalyzeResultOutput> {
 
   // Submit document for analysis
   const initialResponse = await client
     .path('/documentModels/{modelId}:analyze', MODEL_ID)
     .post({
-      contentType: "application/pdf",
-      body: pdfData,
-      queryParameters: { outputContentFormat: "markdown" },
+      contentType: contentType,
+      body: data,
+      queryParameters: { outputContentFormat: outputContentFormat },
     });
 
   if (isUnexpected(initialResponse)) {

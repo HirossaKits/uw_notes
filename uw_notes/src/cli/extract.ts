@@ -1,9 +1,9 @@
-import { connectToChrome } from './extract/connect';
-import { findUWorldPage } from './extract/findUWorldTab';
-import { extractUWorldReview } from './extract/extractUWorldReview';
-import { saveExtraction } from './output/save';
+import { findUWorldPage } from "@/browser/findUWorldTab";
+import { extractUWorldReview } from "@/extract/extractUWorld";
+import { saveExtraction } from "@/extract/saveExtraction";
+import { connectToChrome } from "@/browser/connect";
 
-async function main() {
+export async function extract() {
   try {
     // 1. 既存の Chrome に接続
     const browser = await connectToChrome({ host: '127.0.0.1', port: 9222 });
@@ -26,5 +26,3 @@ async function main() {
     process.exit(1);
   }
 }
-
-main();

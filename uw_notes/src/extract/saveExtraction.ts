@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { UWorldExtraction } from '../extract/extractUWorldReview';
+import type { UWorldExtraction } from './extractUWorld';
 
 const ROOT_DIR = path.resolve(process.cwd(), 'uw_notes');
 const QUESTIONS_DIR = path.join(ROOT_DIR, 'questions');
