@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "extract": "tsx uw_notes/src/cli/extract.ts",
+    "extract": "tsx uw_notes/src/cli/extractUWorld.ts",
     "gen:md": "tsx uw_notes/src/cli/generateMarkdown.ts",
-    "publish:notion": "tsx uw_notes/src/publish/notion/publish.ts",
+    "publish": "tsx uw_notes/src/cli/publish.ts",
     "index": "tsx uw_notes/src/cli/indexPdf.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",

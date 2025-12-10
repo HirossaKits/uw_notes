@@ -19,12 +19,14 @@ async function main() {
   const pdfPath = path.join(process.cwd(), 'public', 'usml_2024_1.pdf');
   
   console.log('📄 Analyzing PDF...');
-  const result = await analyzePdf(pdfPath); // markdown + layout data
+  const result = await analyzePdf(pdfPath);
+
   console.log('✂️  Creating chunks...');
-  const chunks = createChunksFromLayout(result); // paragraph chunks
+  const chunks = createChunksFromLayout(result);
+
   console.log('✨ Embedding chunks...');
   const client = new OpenAI({ apiKey: OPENAI_API_KEY });
-  const embedded = await embedChunks(client, chunks); // store with metadata
+  const embedded = await embedChunks(client, chunks);
 
   console.log('💾 Saving chunks...');
   const db = createDatabase()

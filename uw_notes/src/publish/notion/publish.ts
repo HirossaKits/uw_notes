@@ -276,20 +276,3 @@ export async function publishToNotion(mdPath: string) {
   console.log("✔ Published:", response.url);
   } 
 }
-
-/**
- * MAIN — publish all markdowns
- */
-async function main() {
-  const root = "uw_notes/questions";
-  const folders = fs.readdirSync(root);
-
-  for (const folder of folders) {
-    const mdPath = path.join(root, folder, `${folder}.md`);
-    if (fs.existsSync(mdPath)) {
-      await publishToNotion(mdPath);
-    }
-  }
-}
-
-main().catch(console.error);
