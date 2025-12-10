@@ -5,16 +5,15 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "tsx uw_notes/src/index.ts",
-    "dev": "tsx uw_notes/src/index.ts",
-    "gen:md": "tsx uw_notes/src/generate-md/run.ts",
+    "extract": "tsx uw_notes/src/cli/extract.ts",
+    "gen:md": "tsx uw_notes/src/cli/generateMarkdown.ts",
     "publish:notion": "tsx uw_notes/src/publish/notion/publish.ts",
-    "analyze:pdf": "tsx uw_notes/src/indexer/analyzePdf.ts",
-    "index": "tsx uw_notes/src/index/run.ts",
+    "index": "tsx uw_notes/src/cli/indexPdf.ts",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "debug:db": "tsx uw_notes/src/db/queryChunks.ts"
   },
   "keywords": [],
   "author": "",
