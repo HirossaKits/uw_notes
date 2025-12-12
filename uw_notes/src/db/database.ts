@@ -3,6 +3,8 @@ import Database from "better-sqlite3";
 import * as path from "node:path";
 import * as fs from "node:fs";
 
+export const database = createDatabase();
+
 export function createDatabase() {
   const dbDir = path.join(process.cwd(), "db");
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir);

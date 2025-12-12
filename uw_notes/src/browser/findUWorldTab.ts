@@ -18,7 +18,7 @@ export async function findUWorldPage(browser: Browser): Promise<Page> {
 
   if (!target) {
     throw new Error(
-      'UWorld のタブが見つかりません。UWorld REVIEW 画面を Chrome で開いてから再実行してください。',
+      'UWorld tab not found. Please open UWorld REVIEW page in Chrome and try again.',
     );
   }
 

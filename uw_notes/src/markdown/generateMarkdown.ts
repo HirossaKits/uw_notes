@@ -203,7 +203,7 @@ export async function generateMarkdownForQuestion(
   }
 
   if (!markdown) {
-    throw new Error('OpenAIからMarkdownテキストを取得できませんでした。');
+    throw new Error('Failed to get Markdown text from OpenAI.');
   }
 
   return markdown.trim();

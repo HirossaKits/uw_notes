@@ -7,17 +7,17 @@ import { generateMarkdownForQuestion } from '../markdown/generateMarkdown';
 
 const QUESTIONS_ROOT = path.resolve(process.cwd(), 'uw_notes/questions');
 
-async function main() {
+async function generateMarkdown() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.error('❌ OPENAI_API_KEY が .env に設定されていません。');
+    console.error('❌ OPENAI_API_KEY is not set in .env');
     process.exit(1);
   }
 
   const client = new OpenAI({ apiKey });
 
   if (!fs.existsSync(QUESTIONS_ROOT)) {
-    console.error(`❌ QUESTIONS_ROOT が見つかりません: ${QUESTIONS_ROOT}`);
+    console.error(`❌ QUESTIONS_ROOT not found: ${QUESTIONS_ROOT}`);
     process.exit(1);
   }
 
@@ -25,7 +25,7 @@ async function main() {
   const questionDirs = entries.filter((e) => e.isDirectory());
 
   if (questionDirs.length === 0) {
-    console.error('❌ questions ディレクトリが空です。question.json を先に生成してください。');
+    console.error('❌ questions directory is empty. Please generate question.json first.');
     process.exit(1);
   }
 
@@ -36,13 +36,13 @@ async function main() {
     const mdPath = path.join(dirPath, `${qid}.md`);
 
     if (!fs.existsSync(jsonPath)) {
-      console.warn(`⚠ question.json が見つかりません。スキップ: ${jsonPath}`);
+      console.warn(`⚠ question.json not found. Skipping: ${jsonPath}`);
       continue;
     }
 
-    // 既に md があればスキップしたい場合はここでチェック
+    // Skip if markdown already exists
     if (fs.existsSync(mdPath)) {
-      console.log(`ℹ 既に Markdown が存在します。スキップ: ${mdPath}`);
+      console.log(`ℹ Markdown already exists. Skipping: ${mdPath}`);
       continue;
     }
 
@@ -53,29 +53,26 @@ async function main() {
     try {
       question = JSON.parse(raw) as UWorldExtraction;
     } catch (e) {
-      console.error(`❌ JSON パースに失敗: ${jsonPath}`, e);
+      console.error(`❌ Failed to parse JSON: ${jsonPath}`, e);
       continue;
     }
 
     try {
       const markdown = await generateMarkdownForQuestion(client, question, {
-        model: 'gpt-4.1-mini', // コスト重視なら mini 系、精度重視なら 4.1 / 5.1
+        model: 'gpt-4.1-mini', // Use mini for cost efficiency, 4.1/5.1 for accuracy
       });
 
       fs.writeFileSync(mdPath, markdown, 'utf8');
       console.log(`✅ Saved: ${mdPath}`);
     } catch (e) {
-      console.error(`❌ Markdown 生成に失敗: Question ${qid}`, e);
+      console.error(`❌ Failed to generate Markdown: Question ${qid}`, e);
     }
 
-    // レートリミットが心配なら少し待つ
+    // Wait to avoid rate limiting
     await new Promise((r) => setTimeout(r, 300));
   }
 
-  console.log('\n🎉 全ての question.json に対する Markdown 生成が完了しました。');
+  console.log('\n🎉 Markdown generation completed for all question.json files.');
 }
 
-main().catch((err) => {
-  console.error('❌ Unhandled error:', err);
-  process.exit(1);
-});
+generateMarkdown().catch(console.error);

@@ -3,7 +3,7 @@ import { extractUWorldReview } from "@/extract/extractUWorld";
 import { saveExtraction } from "@/extract/saveExtraction";
 import { connectToChrome } from "@/browser/connect";
 
-export async function extract() {
+export async function extractUWorld() {
   try {
     // 1. 既存の Chrome に接続
     const browser = await connectToChrome({ host: '127.0.0.1', port: 9222 });
@@ -26,3 +26,5 @@ export async function extract() {
     process.exit(1);
   }
 }
+
+extractUWorld().catch(console.error);

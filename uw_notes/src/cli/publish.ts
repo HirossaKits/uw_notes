@@ -13,3 +13,5 @@ export async function publish() {
     }
   }
 }
+
+publish().catch(console.error);

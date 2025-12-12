@@ -76,7 +76,7 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
   });
 
   if (!questionId) {
-    throw new Error('questionId の抽出に失敗しました。');
+    throw new Error('Failed to extract questionId.');
   }
 
   // setup folder
