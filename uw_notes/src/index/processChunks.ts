@@ -6,23 +6,21 @@ type Chunk = {
   text: string;
   startOffset: number;
   endOffset: number;
-  startPage: number;
-  endPage: number;
-  bboxStart: number[];
-  bboxEnd: number[];
+  page: number;
+  polygon: number[];
+};
+
+export type MetaData = {
+  page: number;
+  polygon: number[];
+  textStartOffset: number;
+  textEndOffset: number;
 };
 
 export type EmbeddedChunk = {
   text: string;
   embedding: number[];
-  metadata: {
-    startPage: number;
-    endPage: number;
-    bboxStart: number[];
-    bboxEnd: number[];
-    textStartOffset: number;
-    textEndOffset: number;
-  };
+  metadata: MetaData;
 };
 
 export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
@@ -39,10 +37,8 @@ export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
       text: p.content,
       startOffset: span?.offset || 0,
       endOffset: (span?.offset || 0) + (span?.length || 0),
-      startPage: bounding?.pageNumber || 1,
-      endPage: bounding?.pageNumber || 1,
-      bboxStart: bounding?.polygon || [],
-      bboxEnd: bounding?.polygon || [],
+      page: bounding?.pageNumber || 1,
+      polygon: bounding?.polygon || [],
     };
   });
 }
@@ -57,10 +53,8 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[]): Promise<Embe
       text: c.text,
       embedding: embedding,
       metadata: {
-        startPage: c.startPage,
-        endPage: c.endPage,
-        bboxStart: c.bboxStart,
-        bboxEnd: c.bboxEnd,
+        page: c.page,
+        polygon: c.polygon,
         textStartOffset: c.startOffset,
         textEndOffset: c.endOffset,
       },
