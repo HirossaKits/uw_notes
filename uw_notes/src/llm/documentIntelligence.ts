@@ -49,6 +49,5 @@ export async function analyzeDocument(data: string | Buffer,
     throw new Error('No analyze result returned');
   }
 
-  // Return JSON result
   return result.analyzeResult;
 }

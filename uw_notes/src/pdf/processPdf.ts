@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { createCanvas, Image } from "@napi-rs/canvas";
+import { createCanvas, Image, PDFDocument } from "@napi-rs/canvas";
 // legacyビルドを使用（Node.js環境用）
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
@@ -10,6 +10,9 @@ if (typeof (globalThis as any).Image === 'undefined') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).Image = Image;
 }
+
+import fs from 'node:fs';
+import path from "node:path";
 
 export class NodeCanvasFactory {
   create(width: number, height: number) {
@@ -55,12 +58,12 @@ export async function clipPngFromPdf(
   boundingBox: BoundingBox,
   outputPath: string
 ) {
-  // PDF 読み込み
+  // load PDF
   const loadingTask = getDocument(pdfPath);
   const pdf = await loadingTask.promise;
   const pdfPage = await pdf.getPage(page);
 
-  // ページを画像としてレンダリング
+  // render page as image
   const scale = 2.0;
   const viewport = pdfPage.getViewport({ scale });
   const canvasFactory = new NodeCanvasFactory();
@@ -75,13 +78,13 @@ export async function clipPngFromPdf(
 
   const buffer = canvas.canvas.toBuffer('image/png');
 
-  // polygon (インチ単位) → ピクセル座標に変換
-  // PDFは72 DPI (1インチ = 72ポイント)
-  // ピクセル = インチ × 72 × scale
+  // polygon (inch) → pixel
+  // PDF is 72 DPI (1 inch = 72 points)
+  // pixel = inch × 72 × scale
   const DPI = 72;
   const inchesToPixels = (inches: number) => inches * DPI * scale;
 
-  // inch -> pixel座標に変換
+  // inch -> pixel
   const left = Math.floor(inchesToPixels(boundingBox.left));
   const top = Math.floor(inchesToPixels(boundingBox.top));
   const right = Math.ceil(inchesToPixels(boundingBox.right));
@@ -89,11 +92,29 @@ export async function clipPngFromPdf(
   const width = right - left;
   const height = bottom - top;
 
-  // sharp で切り抜き
+  // clip by sharp
   await sharp(buffer)
     .extract({ left, top, width, height })
     .png()
     .toFile(outputPath);
 
   return outputPath;
+}
+
+export async function splitPdf(pdfPath: string, chunkSize = 100): Promise<void> {
+  // load PDF
+  const loadingTask = getDocument(pdfPath);
+  const pdf = await loadingTask.promise;
+  const totalPages = pdf.numPages;
+
+  // split PDF by chunkSize
+  for (let page = 1; page <= totalPages+chunkSize-1; page+=chunkSize) {    
+    const pdfPage = await pdf.extractPages([{
+      document: Uint8Array.from(fs.readFileSync(pdfPath, 'utf8')),
+      includePages: [page, page+chunkSize-1],
+      excludePages: []
+    }]);
+    const stem = path.basename(pdfPath, path.extname(pdfPath));
+    fs.writeFileSync(`${stem}_${page}_${page+chunkSize-1}.pdf`, Buffer.from(pdfPage.buffer));
+  }
 }

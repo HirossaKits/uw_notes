@@ -2,13 +2,12 @@ import path from "node:path";
 import fs from "node:fs";
 import { queryChunks } from "@/db/queryChunks";
 import { database } from "@/db/database";
-import { clipPngFromPdf, getBoundingBox } from "@/pdf/clipPngFromPdf";
+import { clipPngFromPdf, getBoundingBox } from "@/pdf/processPdf";
 import { MetaData } from "@/index/processChunks";
 
 export async function clipPdf() {
   const questionsRoot = path.join (process.cwd(), 'uw_notes', 'questions');
   const questionDirs = fs.readdirSync(questionsRoot);
-  console.log(questionDirs);
 
   for (const dir of questionDirs) {
     const questionJson = fs.readFileSync(path.join(questionsRoot, dir, 'question.json'), 'utf8');

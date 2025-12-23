@@ -5,6 +5,8 @@ import { analyzePdf } from '../pdf/analyzePdf';
 import { createChunksFromLayout, embedChunks } from '../index/processChunks';
 import { database } from '@/db/database';
 import { saveChunks } from '@/db/saveChunks';
+import fs from 'node:fs';
+import { AnalyzeResultOutput } from '@azure-rest/ai-document-intelligence';
 
 dotenv.config();
 
@@ -14,10 +16,8 @@ if (!OPENAI_API_KEY) {
 }
 
 async function indexPdf() {
-  const pdfPath = path.join(process.cwd(), 'public', 'usml_2024_2.pdf');
-  
-  console.log('📄 Analyzing PDF...');
-  const result = await analyzePdf(pdfPath);
+  const jsonPath = path.join(process.cwd(), 'public', 'usml_2024_20.json');
+  const result = JSON.parse(fs.readFileSync(jsonPath, 'utf8')) as AnalyzeResultOutput;
 
   console.log('✂️  Creating chunks...');
   const chunks = createChunksFromLayout(result);
@@ -27,7 +27,7 @@ async function indexPdf() {
   const embedded = await embedChunks(client, chunks);
 
   console.log('💾 Saving chunks...');
-  saveChunks(database, embedded, pdfPath);
+  saveChunks(database, embedded, jsonPath);
 }
 
 indexPdf().catch(console.error);
