@@ -4,13 +4,14 @@ import { queryChunks } from "@/db/queryChunks";
 import { database } from "@/db/database";
 import { clipPngFromPdf, getBoundingBox } from "@/pdf/processPdf";
 import { MetaData } from "@/index/processChunks";
+import { PATHS } from "@/config/paths";
 
 export async function clipPdf() {
-  const questionsRoot = path.join (process.cwd(), 'uw_notes', 'questions');
+  const questionsRoot = PATHS.QUESTIONS;
   const questionDirs = fs.readdirSync(questionsRoot);
 
   for (const dir of questionDirs) {
-    const questionJson = fs.readFileSync(path.join(questionsRoot, dir, 'question.json'), 'utf8');
+    const questionJson = fs.readFileSync(PATHS.questionJson(dir), 'utf8');
     const question = JSON.parse(questionJson);
     // const query = `
     // ${question.topic}
@@ -39,7 +40,7 @@ export async function clipPdf() {
       const metaList = metaByPage[page];
       const polygons = metaList.map((m) => m.polygon);
       const boundingBox = getBoundingBox(polygons);
-      const png = await clipPngFromPdf("public/usml_2024_2.pdf", parseInt(page), boundingBox, path.join(questionsRoot, dir, 'images', 'reference.png'));
+      const png = await clipPngFromPdf(path.join(PATHS.PUBLIC, 'usml_2024_2.pdf'), parseInt(page), boundingBox, path.join(PATHS.questionImages(dir), 'reference.png'));
     }
   }
 }

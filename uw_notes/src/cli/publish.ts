@@ -1,13 +1,13 @@
-import path from "node:path";
 import fs from "node:fs";
 import { publishToNotion } from "@/publish/notion/publish";
+import { PATHS } from "@/config/paths";
 
 export async function publish() {
-  const root = "uw_notes/questions";
+  const root = PATHS.QUESTIONS;
   const folders = fs.readdirSync(root);
 
   for (const folder of folders) {
-    const mdPath = path.join(root, folder, `${folder}.md`);
+    const mdPath = PATHS.questionMarkdown(folder);
     if (fs.existsSync(mdPath)) {
       await publishToNotion(mdPath);
     }

@@ -13,6 +13,7 @@ if (typeof (globalThis as any).Image === 'undefined') {
 
 import fs from 'node:fs';
 import path from "node:path";
+import { PATHS } from "@/config/paths";
 
 export class NodeCanvasFactory {
   create(width: number, height: number) {
@@ -106,15 +107,35 @@ export async function splitPdf(pdfPath: string, chunkSize = 100): Promise<void> 
   const loadingTask = getDocument(pdfPath);
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
+  const pdfBytes = fs.readFileSync(pdfPath);
 
   // split PDF by chunkSize
-  for (let page = 1; page <= totalPages+chunkSize-1; page+=chunkSize) {    
-    const pdfPage = await pdf.extractPages([{
-      document: Uint8Array.from(fs.readFileSync(pdfPath, 'utf8')),
-      includePages: [page, page+chunkSize-1],
+  for (let page = 1; page <= totalPages; page += chunkSize) {
+    const startPage = page;
+    const endPage = Math.min(page + chunkSize - 1, totalPages);
+    
+    // includePages
+    const pageNumbers: number[] = [];
+    for (let i = startPage -1; i <= endPage -1; i++) {
+      pageNumbers.push(i);
+    }
+    
+    const extractedBytes = await pdf.extractPages([{
+      document: Uint8Array.from(pdfBytes),
+      includePages: pageNumbers,
       excludePages: []
     }]);
+    
+    if (!extractedBytes) {
+      throw new Error(`Failed to extract pages ${startPage} to ${endPage} from ${pdfPath}.`);
+    }
+    
+    const pdfDir = PATHS.PDF.CHUNK;
+    if (!fs.existsSync(pdfDir)) {
+      fs.mkdirSync(pdfDir, { recursive: true });
+    }
     const stem = path.basename(pdfPath, path.extname(pdfPath));
-    fs.writeFileSync(`${stem}_${page}_${page+chunkSize-1}.pdf`, Buffer.from(pdfPage.buffer));
+    const newPdfPath = PATHS.pdfChunk(stem, startPage, endPage);
+    fs.writeFileSync(newPdfPath, Buffer.from(extractedBytes));
   }
 }

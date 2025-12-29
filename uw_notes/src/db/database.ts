@@ -1,15 +1,15 @@
 import * as sqliteVec from "sqlite-vec";
 import Database from "better-sqlite3";
-import * as path from "node:path";
 import * as fs from "node:fs";
+import { PATHS } from "@/config/paths";
 
 export const database = createDatabase();
 
 export function createDatabase() {
-  const dbDir = path.join(process.cwd(), "db");
+  const dbDir = PATHS.DB;
   if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir);
 
-  const dbPath = path.join(dbDir, "vector_store.sqlite3");
+  const dbPath = PATHS.DATABASE;
   const db = new Database(dbPath);
 
   // sqlite-vec を有効化

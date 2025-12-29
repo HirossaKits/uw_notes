@@ -1,13 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Page } from 'playwright';
+import { PATHS } from '@/config/paths';
 
-const ROOT_DIR = path.resolve(process.cwd(), 'uw_notes');
-const QUESTIONS_DIR = path.join(ROOT_DIR, 'questions');
-
-if (!fs.existsSync(ROOT_DIR)) fs.mkdirSync(ROOT_DIR, { recursive: true });
-if (!fs.existsSync(QUESTIONS_DIR))
-  fs.mkdirSync(QUESTIONS_DIR, { recursive: true });
+if (!fs.existsSync(PATHS.UW_NOTES)) fs.mkdirSync(PATHS.UW_NOTES, { recursive: true });
+if (!fs.existsSync(PATHS.QUESTIONS))
+  fs.mkdirSync(PATHS.QUESTIONS, { recursive: true });
 
 /** 改善後の JSON スキーマ */
 export interface UWorldOption {
@@ -80,8 +78,8 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
   }
 
   // setup folder
-  const questionDir = path.join(QUESTIONS_DIR, questionId);
-  const imagesDir = path.join(questionDir, 'images');
+  const questionDir = PATHS.questionDir(questionId);
+  const imagesDir = PATHS.questionImages(questionId);
 
   if (!fs.existsSync(questionDir)) fs.mkdirSync(questionDir, { recursive: true });
   if (!fs.existsSync(imagesDir)) fs.mkdirSync(imagesDir, { recursive: true });
