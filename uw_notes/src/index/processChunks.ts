@@ -6,15 +6,16 @@ type Chunk = {
   text: string;
   startOffset: number;
   endOffset: number;
-  page: number;
+  page: number[];
   polygon: number[];
 };
 
 export type MetaData = {
-  page: number;
+  page: number[];
   polygon: number[];
   textStartOffset: number;
   textEndOffset: number;
+  source: string;
 };
 
 export type EmbeddedChunk = {
@@ -25,40 +26,210 @@ export type EmbeddedChunk = {
 
 export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
   if (!result.paragraphs) return [];
-
+  if (!result.content) {
+    console.warn('result.content is missing, returning empty chunks');
+    return [];
+  }
+  
   const paragraphs = result.paragraphs;
+  const headings = splitMarkdownByHeading(result.content);
 
-  return paragraphs.map((p) => {
-    const span = p.spans?.[0];
-    const bounding = p.boundingRegions?.[0];
-    console.log(p.content);
+  const chunks = headings.map((h) => {
+    // Filter paragraphs that fall within the heading's span range
+    const paragraphsInRange = paragraphs.filter((p) => {
+      const spanOffset = p.spans?.[0]?.offset;
+      if (spanOffset === undefined) return false;
+      return spanOffset >= h.span.offset && spanOffset < h.span.offset + h.span.length;
+    });
+    
+    // Extract unique page numbers, filtering out undefined/null values
+    const pageNumbers = Array.from(
+      new Set(
+        paragraphsInRange
+          .map((p) => p.boundingRegions?.[0]?.pageNumber)
+      )
+    );
+    
+    // Calculate bounding box from polygons
+    // polygon format from Azure Document Intelligence: [x1, y1, x2, y2, x3, y3, x4, y4]
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    
+    for (const p of paragraphsInRange) {
+      const polygon = p.boundingRegions?.[0]?.polygon;
+        // Process all coordinates in the polygon (x, y pairs)
+        for (let i = 0; i < polygon.length; i += 2) {
+          const x = polygon[i];
+          const y = polygon[i + 1];
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+      }
+    }
+
+    const polygon = [minX, minY, maxX, maxY]
 
     return {
-      text: p.content,
-      startOffset: span?.offset || 0,
-      endOffset: (span?.offset || 0) + (span?.length || 0),
-      page: bounding?.pageNumber || 1,
-      polygon: bounding?.polygon || [],
+      text: h.content,
+      startOffset: h.span.offset,
+      endOffset: h.span.offset + h.span.length,
+      page: pageNumbers, 
+      polygon: polygon,
     };
   });
+  
+  return chunks.filter((c) => c.text.trim().length > 0);
 }
 
-export async function embedChunks(client: OpenAI, chunks: Chunk[]): Promise<EmbeddedChunk[]> {
+const heading = {
+  H1: "#",
+  H2: "##",
+  H3: "###",
+  H4: "####",
+  H5: "#####"
+} as const;
+
+type HeadingSymbol = typeof heading[keyof typeof heading];
+
+export function splitMarkdownByHeading(md_content: string): {headingType: HeadingSymbol, headingText: string, content:string, span:{offset: number, length: number}}[] {
+  const lines = md_content.split('\n');
+  const result: {headingType: HeadingSymbol, headingText: string, content:string, span:{offset: number, length: number}}[] = [];
+  
+  // Regex to detect heading lines: ^#{1,5}\s+(.+)$
+  const headingRegex = /^(#{1,5})\s+(.+)$/;
+  
+  // Calculate the offset of a line in the original md_content
+  const getLineOffset = (lineIndex: number): number => {
+    let offset = 0;
+    for (let i = 0; i < lineIndex; i++) {
+      offset += lines[i].length;
+      // Add newline character if not the last line
+      if (i < lines.length - 1) {
+        offset += 1;
+      }
+    }
+    return offset;
+  };
+  
+  // Stack to maintain heading information (tracks hierarchical structure)
+  const headingStack: Array<{level: number, text: string, lineIndex: number, contentLines: string[], contentEndLineIndex?: number}> = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(headingRegex);
+    
+    if (match) {
+      const level = match[1].length; // Number of # (1-5)
+      const headingText = match[2].trim();
+      
+      // When a heading of the same or higher level appears,
+      // process all lower-level headings from the stack and add them to the result
+      while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
+        const completedHeading = headingStack.pop()!;
+        // Verify that the level is within the range of 1-5
+        if (completedHeading.level < 1 || completedHeading.level > 5) {
+          throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
+        }
+        const headingSymbol = heading[`H${completedHeading.level}` as keyof typeof heading] as HeadingSymbol;
+        
+        // Calculate span: offset is the start of the heading line, length includes heading and content
+        const headingStartOffset = getLineOffset(completedHeading.lineIndex);
+        const contentEndLineIndex = completedHeading.contentEndLineIndex ?? (i - 1);
+        // Calculate the end offset: start of the line after the last content line (or end of last content line if it's the last line)
+        const contentEndOffset = contentEndLineIndex >= 0 && contentEndLineIndex < lines.length - 1
+          ? getLineOffset(contentEndLineIndex + 1) // Start of next line (exclusive)
+          : contentEndLineIndex >= 0
+          ? getLineOffset(contentEndLineIndex) + lines[contentEndLineIndex].length // End of last line (inclusive)
+          : headingStartOffset + lines[completedHeading.lineIndex].length; // Only heading line
+        const length = contentEndOffset - headingStartOffset;
+        const fullContent = completedHeading.contentLines.join('\n').trim();
+        
+        result.push({
+          headingType: headingSymbol,
+          headingText: '#'.repeat(completedHeading.level) + ' ' + completedHeading.text,
+          content: fullContent,
+          span: {
+            offset: headingStartOffset,
+            length: length
+          }
+        });
+      }
+      
+      // Add the new heading to the stack
+      headingStack.push({
+        level,
+        text: headingText,
+        lineIndex: i,
+        contentLines: []
+      });
+    } else {
+      // Non-heading lines are added as content to the topmost heading in the stack
+      if (headingStack.length > 0) {
+        headingStack[headingStack.length - 1].contentLines.push(line);
+        // Update the end line index for the current heading
+        headingStack[headingStack.length - 1].contentEndLineIndex = i;
+      }
+    }
+  }
+  
+  // Process all remaining headings
+  while (headingStack.length > 0) {
+    const completedHeading = headingStack.pop()!;
+    // Verify that the level is within the range of 1-5
+    if (completedHeading.level < 1 || completedHeading.level > 5) {
+      throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
+    }
+    const headingSymbol = heading[`H${completedHeading.level}` as keyof typeof heading] as HeadingSymbol;
+    
+    // Calculate span: offset is the start of the heading line, length includes heading and content
+    const headingStartOffset = getLineOffset(completedHeading.lineIndex);
+    const contentEndLineIndex = completedHeading.contentEndLineIndex ?? (lines.length - 1);
+    // Calculate the end offset: start of the line after the last content line (or end of last content line if it's the last line)
+    const contentEndOffset = contentEndLineIndex >= 0 && contentEndLineIndex < lines.length - 1
+      ? getLineOffset(contentEndLineIndex + 1) // Start of next line (exclusive)
+      : contentEndLineIndex >= 0
+      ? getLineOffset(contentEndLineIndex) + lines[contentEndLineIndex].length // End of last line (inclusive)
+      : headingStartOffset + lines[completedHeading.lineIndex].length; // Only heading line
+    const length = contentEndOffset - headingStartOffset;
+    const fullContent = completedHeading.contentLines.join('\n').trim();
+    
+    result.push({
+      headingType: headingSymbol,
+      headingText: '#'.repeat(completedHeading.level) + ' ' + completedHeading.text,
+      content: fullContent,
+      span: {
+        offset: headingStartOffset,
+        length: length
+      }
+    });
+  }
+  
+  return result;
+}
+
+export async function embedChunks(client: OpenAI, chunks: Chunk[], source: string): Promise<EmbeddedChunk[]> {
   const embedded: EmbeddedChunk[] = [];
 
   for (const c of chunks) {
-    const embedding = await createEmbedding(c.text); 
-
-    embedded.push({
-      text: c.text,
-      embedding: embedding,
-      metadata: {
-        page: c.page,
-        polygon: c.polygon,
-        textStartOffset: c.startOffset,
-        textEndOffset: c.endOffset,
-      },
-    });
+    try {
+      const embedding = await createEmbedding(c.text); 
+      embedded.push({
+        text: c.text,
+        embedding: embedding,
+        metadata: {
+          page: c.page,
+          polygon: c.polygon,
+          textStartOffset: c.startOffset,
+          textEndOffset: c.endOffset,
+          source: source,
+        },
+      });
+    } catch (error) {
+      console.error(`Failed to embed chunk at page ${c.page}:`, error);
+    }
   }
 
   return embedded;

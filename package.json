@@ -12,7 +12,7 @@
     "extract": "tsx uw_notes/src/cli/extractUWorld.ts",
     "gen:md": "tsx uw_notes/src/cli/generateMarkdown.ts",
     "analyze:pdf": "tsx uw_notes/src/cli/analyzePdf.ts",
-    "index": "tsx uw_notes/src/cli/indexPdf.ts",
+    "indexing": "tsx uw_notes/src/cli/indexing.ts",
     "debug:db": "tsx uw_notes/src/db/queryChunks.ts",
     "clip:pdf": "tsx uw_notes/src/cli/clipPdf.ts",
     "split:pdf": "tsx uw_notes/src/cli/splitPdf.ts",
