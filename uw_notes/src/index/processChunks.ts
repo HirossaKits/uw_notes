@@ -3,16 +3,16 @@ import { AnalyzeResultOutput } from "@azure-rest/ai-document-intelligence";
 import OpenAI from "openai";
 
 type Chunk = {
+  heading: string;
   text: string;
   startOffset: number;
   endOffset: number;
-  page: number[];
-  polygon: number[];
+  boundingRegions: {page: number; polygon: number[]}[];
 };
 
 export type MetaData = {
-  page: number[];
-  polygon: number[];
+  heading: string;
+  boundingRegions: {page: number; polygon: number[]}[];
   textStartOffset: number;
   textEndOffset: number;
   source: string;
@@ -42,42 +42,60 @@ export function createChunksFromLayout(result: AnalyzeResultOutput): Chunk[] {
       return spanOffset >= h.span.offset && spanOffset < h.span.offset + h.span.length;
     });
     
-    // Extract unique page numbers, filtering out undefined/null values
-    const pageNumbers = Array.from(
-      new Set(
-        paragraphsInRange
-          .map((p) => p.boundingRegions?.[0]?.pageNumber)
-      )
-    );
-    
-    // Calculate bounding box from polygons
+    // Group paragraphs by page and calculate bounding box for each page
     // polygon format from Azure Document Intelligence: [x1, y1, x2, y2, x3, y3, x4, y4]
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
+    const polygonsByPage = new Map<number, number[][]>();
     
     for (const p of paragraphsInRange) {
+      const pageNum = p.boundingRegions?.[0]?.pageNumber;
       const polygon = p.boundingRegions?.[0]?.polygon;
+      
+      if (pageNum !== undefined && polygon && polygon.length >= 8) {
+        if (!polygonsByPage.has(pageNum)) {
+          polygonsByPage.set(pageNum, []);
+        }
+        polygonsByPage.get(pageNum)!.push(polygon);
+      }
+    }
+    
+    // Calculate bounding box for each page
+    const boundingRegions = Array.from(polygonsByPage.entries()).map(([page, polygons]) => {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      
+      for (const polygon of polygons) {
         // Process all coordinates in the polygon (x, y pairs)
         for (let i = 0; i < polygon.length; i += 2) {
           const x = polygon[i];
           const y = polygon[i + 1];
-          minX = Math.min(minX, x);
-          minY = Math.min(minY, y);
-          maxX = Math.max(maxX, x);
-          maxY = Math.max(maxY, y);
+          if (x !== undefined && y !== undefined && !isNaN(x) && !isNaN(y)) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
       }
-    }
-
-    const polygon = [minX, minY, maxX, maxY]
+      
+      // Return bounding box as [minX, minY, maxX, maxY]
+      const boundingBox = (minX !== Infinity && minY !== Infinity && maxX !== -Infinity && maxY !== -Infinity)
+        ? [minX, minY, maxX, maxY]
+        : [0, 0, 0, 0]; // Fallback if no valid coordinates
+      
+      return {
+        page,
+        polygon: boundingBox,
+      };
+    });
 
     return {
+      heading: h.headingText,
       text: h.content,
       startOffset: h.span.offset,
       endOffset: h.span.offset + h.span.length,
-      page: pageNumbers, 
-      polygon: polygon,
+      boundingRegions: boundingRegions,
     };
   });
   
@@ -215,20 +233,24 @@ export async function embedChunks(client: OpenAI, chunks: Chunk[], source: strin
 
   for (const c of chunks) {
     try {
-      const embedding = await createEmbedding(c.text); 
+      const embedding = await createEmbedding(c.text);
+      
       embedded.push({
         text: c.text,
         embedding: embedding,
         metadata: {
-          page: c.page,
-          polygon: c.polygon,
+          boundingRegions: c.boundingRegions,
           textStartOffset: c.startOffset,
           textEndOffset: c.endOffset,
           source: source,
+          heading: c.heading,
         },
       });
     } catch (error) {
-      console.error(`Failed to embed chunk at page ${c.page}:`, error);
+      const pageInfo = c.boundingRegions.length > 0 
+        ? `pages [${c.boundingRegions.map(br => br.page).join(', ')}]` 
+        : 'unknown page';
+      console.error(`Failed to embed chunk at ${pageInfo}:`, error);
     }
   }
 
