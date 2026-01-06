@@ -8,15 +8,17 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check --write .",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
     "extract": "tsx uw_notes/src/cli/extractUWorld.ts",
     "gen:md": "tsx uw_notes/src/cli/generateMarkdown.ts",
+    "split:pdf": "tsx uw_notes/src/cli/splitPdf.ts",
     "analyze:pdf": "tsx uw_notes/src/cli/analyzePdf.ts",
     "indexing": "tsx uw_notes/src/cli/indexing.ts",
-    "debug:db": "tsx uw_notes/src/db/queryChunks.ts",
     "clip:pdf": "tsx uw_notes/src/cli/clipPdf.ts",
-    "split:pdf": "tsx uw_notes/src/cli/splitPdf.ts",
-    "publish": "tsx uw_notes/src/cli/publish.ts"
+    "publish": "tsx uw_notes/src/cli/publish.ts",
+    "debug:db": "tsx uw_notes/src/db/queryChunks.ts"
   },
   "keywords": [],
   "author": "",
@@ -39,7 +41,10 @@
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
     "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
   }
 }
