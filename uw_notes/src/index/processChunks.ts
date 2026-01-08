@@ -106,15 +106,16 @@ const heading = {
   H1: "#",
   H2: "##",
   H3: "###",
-  H4: "####",
-  H5: "#####"
+  // ignore H4 and H5 for now
+  // H4: "####",
+  // H5: "#####"
 } as const;
 
-type HeadingSymbol = typeof heading[keyof typeof heading];
+type HeadingType = keyof typeof heading;
 
-export function splitMarkdownByHeading(md_content: string): {headingType: HeadingSymbol, headingText: string, content:string, span:{offset: number, length: number}}[] {
+export function splitMarkdownByHeading(md_content: string): {headingType: HeadingType, headingText: string, content:string, span:{offset: number, length: number}}[] {
   const lines = md_content.split('\n');
-  const result: {headingType: HeadingSymbol, headingText: string, content:string, span:{offset: number, length: number}}[] = [];
+  const result: {headingType: HeadingType, headingText: string, content:string, span:{offset: number, length: number}}[] = [];
   
   // Regex to detect heading lines: ^#{1,5}\s+(.+)$
   const headingRegex = /^(#{1,5})\s+(.+)$/;
@@ -151,7 +152,7 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
         if (completedHeading.level < 1 || completedHeading.level > 5) {
           throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
         }
-        const headingSymbol = heading[`H${completedHeading.level}` as keyof typeof heading] as HeadingSymbol;
+        const headingType = `H${completedHeading.level}` as keyof typeof heading;
         
         // Calculate span: offset is the start of the heading line, length includes heading and content
         const headingStartOffset = getLineOffset(completedHeading.lineIndex);
@@ -166,8 +167,8 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
         const fullContent = completedHeading.contentLines.join('\n').trim();
         
         result.push({
-          headingType: headingSymbol,
-          headingText: '#'.repeat(completedHeading.level) + ' ' + completedHeading.text,
+          headingType: headingType,
+          headingText: completedHeading.text,
           content: fullContent,
           span: {
             offset: headingStartOffset,
@@ -200,7 +201,7 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
     if (completedHeading.level < 1 || completedHeading.level > 5) {
       throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
     }
-    const headingSymbol = heading[`H${completedHeading.level}` as keyof typeof heading] as HeadingSymbol;
+    const headingType = `H${completedHeading.level}` as HeadingType;
     
     // Calculate span: offset is the start of the heading line, length includes heading and content
     const headingStartOffset = getLineOffset(completedHeading.lineIndex);
@@ -215,8 +216,8 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
     const fullContent = completedHeading.contentLines.join('\n').trim();
     
     result.push({
-      headingType: headingSymbol,
-      headingText: '#'.repeat(completedHeading.level) + ' ' + completedHeading.text,
+      headingType: headingType,
+      headingText: completedHeading.text,
       content: fullContent,
       span: {
         offset: headingStartOffset,
