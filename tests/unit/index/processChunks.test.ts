@@ -127,6 +127,58 @@ Content 3`;
       expect(result[1].headingType).toBe('H2');
       expect(result[2].headingType).toBe('H1');
     });
+
+    it('H1の後にH2、H3が続き、最後にH1が来る場合を正しく処理する', () => {
+      const md = `# Chapter 1
+Introduction text.
+
+## Section 1.1
+Section content.
+
+### Subsection 1.1.1
+Subsection content.
+
+# Chapter 2
+Chapter 2 introduction.`;
+
+      const result = splitMarkdownByHeading(md);
+
+      expect(result).toHaveLength(4);
+      // スタックから取り出される順序: Subsection 1.1.1 (H3) -> Section 1.1 (H2) -> Chapter 1 (H1) -> Chapter 2 (H1)
+      expect(result[0].headingText).toBe('Subsection 1.1.1');
+      expect(result[0].content).toBe('Subsection content.');
+      expect(result[1].headingText).toBe('Section 1.1');
+      expect(result[1].content).toBe('Section content.');
+      expect(result[2].headingText).toBe('Chapter 1');
+      expect(result[2].content).toBe('Introduction text.');
+      expect(result[3].headingText).toBe('Chapter 2');
+      expect(result[3].content).toBe('Chapter 2 introduction.');
+    });
+
+    it('末尾のHTMLコメント（PageBreak、PageNumber、PageHeader）を削除する', () => {
+      const md = `# Heading 1
+
+Some content.
+
+<!-- PageBreak -->
+
+<!-- PageNumber="614" -->
+<!-- PageHeader="SECTION III" -->
+<!-- PageHeader="RENAL RENAL-PATHOLOGY" -->`;
+
+      const result = splitMarkdownByHeading(md);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].headingText).toBe('Heading 1');
+      // HTMLコメントが削除されていることを確認
+      expect(result[0].content).not.toContain('<!-- PageBreak -->');
+      expect(result[0].content).not.toContain('<!-- PageNumber');
+      expect(result[0].content).not.toContain('<!-- PageHeader');
+      // 実際のコンテンツのみが残っていることを確認
+      expect(result[0].content.trim()).toBe('Some content.');
+      // contentが空でないことを確認
+      expect(result[0].content.length).toBeGreaterThan(0);
+    });
   });
 
   describe('span計算', () => {

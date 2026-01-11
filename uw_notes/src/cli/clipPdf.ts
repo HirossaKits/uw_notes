@@ -23,29 +23,21 @@ export async function clipPdf() {
     `;
     // TODO: Optimize limit, similarity
     const queryResults = await queryChunks(database, query, 20);
-    console.log(query)
-    console.log(queryResults)
     const filteredResults = queryResults.filter((r) => r.similarity >= similarityThreshold);
 
     const metaList = filteredResults.map((r) => JSON.parse(r.meta) as MetaData);
-    console.log(metaList)
 
     for (const meta of metaList) {
-      // Process each bounding region (each page)
-      for (const region of meta.boundingRegions) {
-        // region.polygon is already a bounding box [minX, minY, maxX, maxY]
-        // Convert to BoundingBox format {left, top, right, bottom}
-        const boundingBox = {
-          left: region.polygon[0],
-          top: region.polygon[1],
-          right: region.polygon[2],
-          bottom: region.polygon[3],
-        };
-        const png = await clipPngFromPdf(
+      const pages = new Set(meta.boundingRegions.map((r) => r.page));
+
+      for (const page of pages) {
+        const boundingRegions = meta.boundingRegions.filter((r) => r.page === page);
+        const boundingBox = getBoundingBox(boundingRegions.map((r) => r.polygon));
+        await clipPngFromPdf(
           path.join(PATHS.PDF.CHUNK, path.basename(meta.source, path.extname(meta.source)) + '.pdf'), 
-          region.page, 
+          page, 
           boundingBox, 
-          path.join(PATHS.questionImages(dir), `reference_page${region.page}_${meta.heading}.png`)
+          path.join(PATHS.questionImages(dir), `reference_page${page}_${meta.heading}.png`)
         );
       }
     }

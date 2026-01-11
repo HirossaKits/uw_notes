@@ -117,7 +117,6 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
   const lines = md_content.split('\n');
   const result: {headingType: HeadingType, headingText: string, content:string, span:{offset: number, length: number}}[] = [];
   
-  // Regex to detect heading lines: ^#{1,5}\s+(.+)$
   const headingRegex = /^(#{1,5})\s+(.+)$/;
   
   // Calculate the offset of a line in the original md_content
@@ -125,15 +124,66 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
     let offset = 0;
     for (let i = 0; i < lineIndex; i++) {
       offset += lines[i].length;
-      // Add newline character if not the last line
       if (i < lines.length - 1) {
-        offset += 1;
+        offset += 1; // Add newline character
       }
     }
     return offset;
   };
   
-  // Stack to maintain heading information (tracks hierarchical structure)
+  // Calculate content end offset based on the last content line index
+  const getContentEndOffset = (contentEndLineIndex: number, headingStartOffset: number, headingLineIndex: number): number => {
+    if (contentEndLineIndex >= 0 && contentEndLineIndex < lines.length - 1) {
+      return getLineOffset(contentEndLineIndex + 1); // Start of next line (exclusive)
+    }
+    if (contentEndLineIndex >= 0) {
+      return getLineOffset(contentEndLineIndex) + lines[contentEndLineIndex].length; // End of last line (inclusive)
+    }
+    return headingStartOffset + lines[headingLineIndex].length; // Only heading line
+  };
+  
+  // Remove page metadata comments (PageBreak, PageNumber, PageHeader) from the end of content
+  const removePageMetadataComments = (content: string): string => {
+    // Match HTML comments at the end: <!-- PageBreak -->, <!-- PageNumber="..." -->, <!-- PageHeader="..." -->
+    // Also matches empty lines before these comments
+    return content.replace(/(\n?\r?\n?<!--\s*(?:PageBreak|PageNumber|PageHeader).*?-->\s*)+$/, '').trim();
+  };
+  
+  // Process a completed heading from the stack and add it to the result
+  const processCompletedHeading = (
+    completedHeading: {level: number, text: string, lineIndex: number, contentLines: string[], contentEndLineIndex?: number},
+    defaultContentEndLineIndex: number
+  ): void => {
+    if (completedHeading.level < 1 || completedHeading.level > 3) {
+      console.warn(`Invalid heading level: ${completedHeading.level}. Expected 1-3. Skipping heading: ${completedHeading.text}`);
+      return;
+    }
+    
+    const headingType = `H${completedHeading.level}` as HeadingType;
+    const headingStartOffset = getLineOffset(completedHeading.lineIndex);
+    const contentEndLineIndex = completedHeading.contentEndLineIndex ?? defaultContentEndLineIndex;
+    const contentEndOffset = getContentEndOffset(contentEndLineIndex, headingStartOffset, completedHeading.lineIndex);
+    
+    const originalContent = completedHeading.contentLines.join('\n').trim();
+    const fullContent = removePageMetadataComments(originalContent);
+    // Adjust length to match the cleaned content length (after removing HTML comments)
+    // The original length is (contentEndOffset - headingStartOffset), but we need to subtract
+    // the difference between originalContent and fullContent
+    const originalLength = contentEndOffset - headingStartOffset;
+    const removedLength = originalContent.length - fullContent.length;
+    const length = originalLength - removedLength;
+    
+    result.push({
+      headingType,
+      headingText: completedHeading.text,
+      content: fullContent,
+      span: {
+        offset: headingStartOffset,
+        length,
+      },
+    });
+  };
+  
   const headingStack: Array<{level: number, text: string, lineIndex: number, contentLines: string[], contentEndLineIndex?: number}> = [];
   
   for (let i = 0; i < lines.length; i++) {
@@ -141,40 +191,20 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
     const match = line.match(headingRegex);
     
     if (match) {
-      const level = match[1].length; // Number of # (1-5)
+      const level = match[1].length;
       const headingText = match[2].trim();
+
+  
+      if (headingStack.length > 0 && level > 3) {
+        headingStack[headingStack.length - 1].contentLines.push(line);
+        headingStack[headingStack.length - 1].contentEndLineIndex = i;
+      }
       
       // When a heading of the same or higher level appears,
       // process all lower-level headings from the stack and add them to the result
       while (headingStack.length > 0 && headingStack[headingStack.length - 1].level >= level) {
         const completedHeading = headingStack.pop()!;
-        // Verify that the level is within the range of 1-5
-        if (completedHeading.level < 1 || completedHeading.level > 5) {
-          throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
-        }
-        const headingType = `H${completedHeading.level}` as keyof typeof heading;
-        
-        // Calculate span: offset is the start of the heading line, length includes heading and content
-        const headingStartOffset = getLineOffset(completedHeading.lineIndex);
-        const contentEndLineIndex = completedHeading.contentEndLineIndex ?? (i - 1);
-        // Calculate the end offset: start of the line after the last content line (or end of last content line if it's the last line)
-        const contentEndOffset = contentEndLineIndex >= 0 && contentEndLineIndex < lines.length - 1
-          ? getLineOffset(contentEndLineIndex + 1) // Start of next line (exclusive)
-          : contentEndLineIndex >= 0
-          ? getLineOffset(contentEndLineIndex) + lines[contentEndLineIndex].length // End of last line (inclusive)
-          : headingStartOffset + lines[completedHeading.lineIndex].length; // Only heading line
-        const length = contentEndOffset - headingStartOffset;
-        const fullContent = completedHeading.contentLines.join('\n').trim();
-        
-        result.push({
-          headingType: headingType,
-          headingText: completedHeading.text,
-          content: fullContent,
-          span: {
-            offset: headingStartOffset,
-            length: length
-          }
-        });
+        processCompletedHeading(completedHeading, i - 1);
       }
       
       // Add the new heading to the stack
@@ -182,13 +212,12 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
         level,
         text: headingText,
         lineIndex: i,
-        contentLines: []
+        contentLines: [],
       });
     } else {
       // Non-heading lines are added as content to the topmost heading in the stack
       if (headingStack.length > 0) {
         headingStack[headingStack.length - 1].contentLines.push(line);
-        // Update the end line index for the current heading
         headingStack[headingStack.length - 1].contentEndLineIndex = i;
       }
     }
@@ -197,33 +226,7 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
   // Process all remaining headings
   while (headingStack.length > 0) {
     const completedHeading = headingStack.pop()!;
-    // Verify that the level is within the range of 1-5
-    if (completedHeading.level < 1 || completedHeading.level > 5) {
-      throw new Error(`Invalid heading level: ${completedHeading.level}. Expected 1-5.`);
-    }
-    const headingType = `H${completedHeading.level}` as HeadingType;
-    
-    // Calculate span: offset is the start of the heading line, length includes heading and content
-    const headingStartOffset = getLineOffset(completedHeading.lineIndex);
-    const contentEndLineIndex = completedHeading.contentEndLineIndex ?? (lines.length - 1);
-    // Calculate the end offset: start of the line after the last content line (or end of last content line if it's the last line)
-    const contentEndOffset = contentEndLineIndex >= 0 && contentEndLineIndex < lines.length - 1
-      ? getLineOffset(contentEndLineIndex + 1) // Start of next line (exclusive)
-      : contentEndLineIndex >= 0
-      ? getLineOffset(contentEndLineIndex) + lines[contentEndLineIndex].length // End of last line (inclusive)
-      : headingStartOffset + lines[completedHeading.lineIndex].length; // Only heading line
-    const length = contentEndOffset - headingStartOffset;
-    const fullContent = completedHeading.contentLines.join('\n').trim();
-    
-    result.push({
-      headingType: headingType,
-      headingText: completedHeading.text,
-      content: fullContent,
-      span: {
-        offset: headingStartOffset,
-        length: length
-      }
-    });
+    processCompletedHeading(completedHeading, lines.length - 1);
   }
   
   return result;
