@@ -155,7 +155,7 @@ export function splitMarkdownByHeading(md_content: string): {headingType: Headin
     defaultContentEndLineIndex: number
   ): void => {
     if (completedHeading.level < 1 || completedHeading.level > 3) {
-      console.warn(`Invalid heading level: ${completedHeading.level}. Expected 1-3. Skipping heading: ${completedHeading.text}`);
+      console.warn(`Only heading level 1-3 are supported. Skipping heading: ${completedHeading.text}`);
       return;
     }
     
