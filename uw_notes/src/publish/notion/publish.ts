@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Client } from "@notionhq/client";
-import type { BlockObjectRequest, BlockObjectRequestWithoutChildren, FileUploadObjectResponse } from "@notionhq/client/build/src/api-endpoints";
+import type { BlockObjectRequest, BlockObjectRequestWithoutChildren } from "@notionhq/client/build/src/api-endpoints";
 import dotenv from "dotenv";
 import { markdownToBlocks } from "@tryfabric/martian";
-import sharp, { block } from 'sharp';
-import { json } from "node:stream/consumers";
+import sharp from 'sharp';
+import { glob } from 'glob'
 
 dotenv.config();
 
@@ -145,6 +145,42 @@ async function uploadImagesAndReplacePaths(
   return updatedBlocks;
 }
 
+/**
+ * Upload images and replace paths
+ */
+async function uploadReferenceImages(
+  imageDir: string
+): Promise<BlockObjectRequest[]> {
+  const referenceImages = await glob(path.join(imageDir, 'reference_*.png'));
+  if (referenceImages.length === 0) {
+    return [];
+  }
+  
+  const uploadedImages = await Promise.all(referenceImages.map(async (image) => {
+    console.log(`📤 Uploading: ${image}`);
+    return await uploadImage(image);
+  }));
+  
+  const imageBlocks = uploadedImages.map((image) => ({
+    object: "block",
+    type: "image",
+    image: {
+      type: "file_upload",
+      file_upload: { id: image }
+    }
+  })) as BlockObjectRequest[];
+  
+  // Add H2 heading before image blocks
+  const headingBlock: BlockObjectRequest = {
+    object: "block",
+    type: "heading_2",
+    heading_2: {
+      rich_text: [{ type: "text", text: { content: "References" } }]
+    }
+  };
+  
+  return [headingBlock, ...imageBlocks];
+}
 
 /**
  * Remove children property from BlockObjectRequest to create BlockObjectRequestWithoutChildren
@@ -248,6 +284,10 @@ export async function publishToNotion(mdPath: string) {
 
   // Upload images and replace paths
   const finalBlocks = await uploadImagesAndReplacePaths(updatedBlocks, path.dirname(mdPath));
+
+  // Upload reference images
+  const referenceImages = await uploadReferenceImages(path.join(path.dirname(mdPath), 'images'));
+  finalBlocks.push(...referenceImages);
 
 
   // Title
