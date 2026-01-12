@@ -18,7 +18,7 @@
     "indexing": "tsx uw_notes/src/cli/indexing.ts",
     "clip:pdf": "tsx uw_notes/src/cli/clipPdf.ts",
     "publish": "tsx uw_notes/src/cli/publish.ts",
-    "debug:db": "tsx uw_notes/src/db/queryChunks.ts"
+    "run:all": "npm run extract && npm run gen:md && npm run split:pdf && npm run analyze:pdf && npm run indexing && npm run clip:pdf && npm run publish"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +31,7 @@
     "@tryfabric/martian": "^1.2.4",
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
+    "glob": "^13.0.0",
     "gray-matter": "^4.0.3",
     "openai": "^6.9.1",
     "pdfjs-dist": "^5.4.449",
