@@ -7,18 +7,17 @@ if (!fs.existsSync(PATHS.UW_NOTES)) fs.mkdirSync(PATHS.UW_NOTES, { recursive: tr
 if (!fs.existsSync(PATHS.QUESTIONS))
   fs.mkdirSync(PATHS.QUESTIONS, { recursive: true });
 
-/** 改善後の JSON スキーマ */
 export interface UWorldOption {
-  optionId: string;        // A, B, C...
+  optionId: string;
   optionText: string;
-  answerRate: number | null; // (72%) → 72
+  answerRate: number | null;
   isCorrectOption: boolean;
   isUserSelected: boolean;
 }
 
 export interface UWorldStats {
-  correctPercentOverall: number | null; // "72%" → 72
-  timeSpentSeconds: number | null;      // "06 mins, 10 secs" → 370
+  correctPercentOverall: number | null; 
+  timeSpentSeconds: number | null; 
 }
 
 export interface UWorldExtraction {
@@ -26,8 +25,8 @@ export interface UWorldExtraction {
   questionId: string;
   stem: string | null;
   options: UWorldOption[];
-  correctOptionId: string | null;  // "F"
-  userOptionId: string | null;     // "E"
+  correctOptionId: string | null;
+  userOptionId: string | null;
   explanation: string | null;
   images: string[];
   subject: string | null;
@@ -56,7 +55,35 @@ function parseTimeSpent(raw: string | null): number | null {
 }
 
 /**
- * Review問題を抽出して JSONスキーマを LLM用に改善。
+ * Previous Test ページで Result をクリックして Test ページに移動して情報取得を繰り返す
+ * p タグの属性 mattooltip が "Previous Test" のものクリックして Test ページに移動する
+*/
+export async function extractUWorldReviewFromPreviousTests(page: Page): Promise<UWorldExtraction[][]> {
+  const testLinks = await page.locator('p[mattooltip="Previous Test"]').all();
+  // NOTE: 検証のため先頭の 1 件のみを処理する
+  const testLinksTest = testLinks.slice(0, 1);
+  const tests = await Promise.all(testLinksTest.map(async (link) => {
+    await link.click();
+    return extractUWorldReviewFromTest(page);
+  }));
+  return tests;
+}
+
+/**
+ * Test のページで Review Test をクリックし Review ページに移動して情報取得を繰り返す
+ * i タグの属性 mattooltip が "Review Test" のものクリックして Review ページに移動する
+ */
+export async function extractUWorldReviewFromTest(page: Page): Promise<UWorldExtraction[]> {
+  const reviewTestLinks = await page.locator('i[mattooltip="Review Test"]').all();
+  const reviews = await Promise.all(reviewTestLinks.map(async (link) => {
+    await link.click();
+    return extractUWorldReview(page);
+  }));
+  return reviews;
+}
+
+/**
+ * Review ページから情報を抽出する
  */
 export async function extractUWorldReview(page: Page): Promise<UWorldExtraction> {
   await page.waitForLoadState('domcontentloaded');
@@ -141,7 +168,7 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
       .catch(() => '')
     ).trim();
 
-    // 回答率 "(72%)"
+    // 回答率 "(%)"
     const percentRaw = await row
       .locator('.answer-choice-content span.ng-star-inserted')
       .first()

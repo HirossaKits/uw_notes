@@ -1,5 +1,5 @@
 import { findUWorldPage } from "@/browser/findUWorldTab";
-import { extractUWorldReview } from "@/extract/extractUWorld";
+import { extractUWorldReviewFromPreviousTests } from "@/extract/extractUWorld";
 import { saveExtraction } from "@/extract/saveExtraction";
 import { connectToChrome } from "@/browser/connect";
 
@@ -13,14 +13,15 @@ export async function extractUWorld() {
     await page.bringToFront();
 
     // 3. 抽出（Review 画面 1問分）
-    const extraction = await extractUWorldReview(page);
+    const extractions = await extractUWorldReviewFromPreviousTests(page);
 
     // 4. 保存（question.json）
-    saveExtraction(extraction);
-
-    console.log(
-      `Done: questionId=${extraction.questionId}`,
-    );
+    for (const extraction of extractions.flat()) {
+      saveExtraction(extraction);
+      console.log(
+        `Done: questionId=${extraction.questionId}`,
+      );
+    }
   } catch (e) {
     console.error('Error during extraction:', (e as Error).message);
     process.exit(1);
