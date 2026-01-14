@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Page } from 'playwright';
 import { PATHS } from '@/config/paths';
+import { saveExtraction } from '@/extract/saveExtraction';
 
 if (!fs.existsSync(PATHS.UW_NOTES)) fs.mkdirSync(PATHS.UW_NOTES, { recursive: true });
 if (!fs.existsSync(PATHS.QUESTIONS))
@@ -28,7 +29,10 @@ export interface UWorldExtraction {
   correctOptionId: string | null;
   userOptionId: string | null;
   explanation: string | null;
-  images: string[];
+  images: {
+    stem: string[];
+    explanation: string[];
+  };
   subject: string | null;
   system: string | null;
   topic: string | null;
@@ -56,39 +60,70 @@ function parseTimeSpent(raw: string | null): number | null {
 
 /**
  * Previous Test ページで Result をクリックして Test ページに移動して情報取得を繰り返す
- * p タグの属性 mattooltip が "Previous Test" のものクリックして Test ページに移動する
-*/
-export async function extractUWorldReviewFromPreviousTests(page: Page): Promise<UWorldExtraction[][]> {
-  const testLinks = await page.locator('p[mattooltip="Previous Test"]').all();
-  // NOTE: 検証のため先頭の 1 件のみを処理する
-  const testLinksTest = testLinks.slice(0, 1);
-  const tests = await Promise.all(testLinksTest.map(async (link) => {
+ * p タグの属性 mattooltip が "Results" のものクリックして Test ページに移動する
+ */
+export async function extractUWorldReviewFromPreviousTests(page: Page): Promise<void> {
+  const testLinks = await page.locator('p[mattooltip="Results"]').all();
+  
+  // 各ResultsリンクをクリックしてTestページに移動
+  for (const link of testLinks) {
     await link.click();
-    return extractUWorldReviewFromTest(page);
-  }));
-  return tests;
+    await page.waitForLoadState('domcontentloaded');
+    
+    // TestページからReviewページを取得
+    const reviews = await extractUWorldReviewFromTest(page);
+    
+    // Previous Tests ページに戻る
+    await page.goto(process.env.PREVIOUS_TESTS_URL);
+    await page.waitForLoadState('networkidle');
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // TODO: remove later
+    break;
+  }
 }
 
 /**
  * Test のページで Review Test をクリックし Review ページに移動して情報取得を繰り返す
  * i タグの属性 mattooltip が "Review Test" のものクリックして Review ページに移動する
  */
-export async function extractUWorldReviewFromTest(page: Page): Promise<UWorldExtraction[]> {
-  const reviewTestLinks = await page.locator('i[mattooltip="Review Test"]').all();
-  const reviews = await Promise.all(reviewTestLinks.map(async (link) => {
-    await link.click();
-    return extractUWorldReview(page);
-  }));
-  return reviews;
+export async function extractUWorldReviewFromTest(page: Page): Promise<void> {
+  await page.waitForLoadState('domcontentloaded');
+  const locator = page.locator('i[mattooltip="Review Test"]');
+  await locator.first().waitFor({ state: 'visible' });
+  const reviewTestLink = locator.first();
+  
+  const results: UWorldExtraction[] = [];
+
+  await reviewTestLink.click();
+  await page.waitForLoadState('domcontentloaded');
+
+  for (let i = 0; i < 10; i++) {
+    const review = await extractUWorldReview(page);
+
+    if (i === 9) {
+      await page.getByText('End Review?').waitFor({ state: 'visible' });
+      await page.getByText('Yes').click();
+      await page.waitForLoadState('domcontentloaded');
+      await new Promise((r) => setTimeout(r, 1000));
+      break;
+    }
+
+    await page.getByText('Next').first().click();
+    await page.waitForLoadState('domcontentloaded');
+    await new Promise((r) => setTimeout(r, 1000));
+  }
 }
 
 /**
  * Review ページから情報を抽出する
  */
-export async function extractUWorldReview(page: Page): Promise<UWorldExtraction> {
+export async function extractUWorldReview(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
+  await page.locator('.question-id').first().waitFor({ state: 'visible' });
 
   const url = page.url();
+  console.log("🔍 Extracting review:", url); 
 
   // ---- Question ID ----
   const questionId = await page.evaluate(() => {
@@ -119,7 +154,10 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
     correctOptionId: null,
     userOptionId: null,
     explanation: null,
-    images: [],
+    images: {
+      stem: [],
+      explanation: []
+    },
     subject: null,
     system: null,
     topic: null,
@@ -143,7 +181,7 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
     const filepath = path.join(imagesDir, filename);
     try {
       await el.screenshot({ path: filepath });
-      result.images.push(path.join('images', filename));
+      result.images.stem.push(path.join('images', filename));
     } catch {}
   }
 
@@ -228,7 +266,7 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
     const filepath = path.join(imagesDir, filename);
     try {
       await el.screenshot({ path: filepath });
-      result.images.push(path.join('images', filename));
+      result.images.explanation.push(path.join('images', filename));
     } catch {}
   }
 
@@ -249,5 +287,6 @@ export async function extractUWorldReview(page: Page): Promise<UWorldExtraction>
     result.topic = await getStd(2);
   }
 
-  return result;
+  saveExtraction(result);
+  console.log("✅ Saved extraction:", url); 
 }

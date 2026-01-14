@@ -111,6 +111,13 @@ export async function generateMarkdownForQuestion(
   ## Original Question
   Rewrite the English stem in clean Markdown paragraphs.
   After the English text, add the Japanese translation collapsible block.
+
+  If JSON.images.stem is non-empty, print each image using Markdown syntax with a
+  relative path that works from the Markdown file location:
+
+  ![Stem1](./images/stem_0.png)
+  ![Stem2](./images/stem_1.png)
+  ...
   
   ## Options
   List options as:
@@ -140,6 +147,13 @@ export async function generateMarkdownForQuestion(
   Write the answers explanation.
   
   Then add a collapsible section translating the Answers explanation.
+
+  If JSON.images.explanation is non-empty, print each image using Markdown syntax with a
+  relative path that works from the Markdown file location:
+
+  ![Explanation1](./images/explanation_0.png)
+  ![Explanation2](./images/explanation_1.png)
+  ...
   
   ## Key Points (What to memorize)
   Write 3–7 bullets.
@@ -162,7 +176,7 @@ export async function generateMarkdownForQuestion(
   
   ========================
   IMPORTANT RESTRICTIONS
-  ========================
+  ========================npm
   - Do NOT hallucinate facts not supported by the JSON.
   - Do NOT translate YAML front matter.
   - Do NOT include "(English)" in section titles.
