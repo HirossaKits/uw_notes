@@ -64,22 +64,31 @@ function parseTimeSpent(raw: string | null): number | null {
  */
 export async function extractUWorldReviewFromPreviousTests(page: Page): Promise<void> {
   const testLinks = await page.locator('p[mattooltip="Results"]').all();
-  
-  // 各ResultsリンクをクリックしてTestページに移動
-  for (const link of testLinks) {
-    await link.click();
-    await page.waitForLoadState('domcontentloaded');
-    
-    // TestページからReviewページを取得
-    const reviews = await extractUWorldReviewFromTest(page);
-    
-    // Previous Tests ページに戻る
-    await page.goto(process.env.PREVIOUS_TESTS_URL);
-    await page.waitForLoadState('networkidle');
-    await new Promise((r) => setTimeout(r, 1000));
 
-    // TODO: remove later
-    break;
+  // ページネーションの最終まで繰り返す
+  while (true) {
+    // 各ResultsリンクをクリックしてTestページに移動
+    for (const link of testLinks) {
+      await link.click();
+      await page.waitForLoadState('domcontentloaded');
+      
+      // TestページからReviewページを取得
+      const reviews = await extractUWorldReviewFromTest(page);
+      
+      // Previous Tests ページに戻る
+      await page.goto(process.env.PREVIOUS_TESTS_URL);
+      await page.waitForLoadState('networkidle');
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    try {
+      const nextButton = page.locator('button[aria-label="Next page:"]').first();
+      await nextButton.waitFor({ state: 'visible' ,timeout: 5000 });
+      await nextButton.click();
+      await page.waitForLoadState('domcontentloaded');
+      await new Promise((r) => setTimeout(r, 1000));
+    } catch {
+      break;
+    }
   }
 }
 
